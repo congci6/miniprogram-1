@@ -1,0 +1,22 @@
+{
+  "name": "pocket-city-planner-minigame",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "three": "^0.108.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "@vitejs/plugin-legacy": "^5.4.3",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.19",
+    "vitest": "^2.1.9"
+  }
+}

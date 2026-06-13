@@ -1,0 +1,89 @@
+# 口袋城市规划师 PRD
+
+## 目标
+做一款适合微信生态的轻量城市规划小游戏。玩家在 10 到 30 分钟内铺设道路、放置建筑、观察人口和幸福度变化，逐步把空地经营成紧凑城市。
+
+## 首版范围
+- 64x64 地图
+- 3D 等距低多边形视觉
+- 1 类道路
+- 38 类基础建筑：住宅、公寓、商业、混合用地、办公、研发园区、工业、资源加工园、公园、城市广场、会展中心、市政厅、诊所、区域医院、应急避难中心、纪念花园、学校、社区学院、消防、警务站、警署、通信、邮政、道路养护、停车、雨水花园、公交、轨道交通、城际枢纽、货运、配送中心、货运铁路、电力、太阳能、水务、污水、垃圾发电、回收
+- 教育容量不新增建筑：学校和社区学院继续占用既有 38 类建筑中的教育位，扩展出学位负载、容量、满载率、入学积压和学习通道。
+- 七类分区：住宅、商业、混合用地、办公、工业、公共服务、基础设施
+- 分区自然开发：高需求的住宅/商业/混合用地/办公/工业分区会在接路且适宜度达标后自动生成建筑
+- 分区适宜度：拖拽分区时显示适宜度，自动开发会过滤低适宜度地块；住宅偏好服务和低污染，商业/办公偏好地价、公交和教育，工业偏好物流和废弃物可达
+- 建筑选址诊断：建筑建造预览会显示中文“选址诊断”，用 `BuildingSiteScore` / `SiteDiagnosis` 给出 1-2 行建议，解释当前地块的地价、污染/噪声、道路接入、推荐分区/适宜度，以及公交、物流、通信、邮政、停车、雨洪和服务可达性如何影响该建筑；该能力不新增建筑、不新增工具按钮，38 类建筑和 48 个工具按钮口径不变
+- 政策效果反馈：点击任一既有城市政策按钮后，右侧预览面板显示 `PolicyImpactPreview`，标明本次切换是启用还是关闭，并即时展示月收支、拥堵、停车压力、步行可达性、事故风险、雨洪韧性/内涝风险、政策积压等关键 delta；该能力不新增政策按钮，不改变 38 类建筑、48 个工具按钮和 33 个 HUD 状态口径
+- 目标行动建议：当前目标/里程碑面板在原目标 hint 后追加 `OBJECTIVE_ACTION_ADVICE` 的“建议：...”短提示，由当前未完成里程碑 id 和城市指标生成；均衡服务提示补主要服务缺口来源，交通目标提示打通断头路、升级主干或补公交，财政目标提示控预算、扩税基或处理债务，医疗/教育/警务/消防等专项目标提示补对应容量或响应；该能力不新增按钮，不增加 HUD 状态格，不改变 38/48/33 数量口径
+- 警报优先摘要：右侧警报栏使用 `ALERT_PRIORITY_DIGEST`，在 HUD 视图层按严重度排序并只展示少量最关键告警，末尾用 `+N` 表示还有更多；`Metrics.Alerts` 仍保留完整告警列表。排序优先暴露现金、赤字、水电、污水、雨洪、医疗、消防、警务、灾害、交通和服务缺口等高影响风险；该能力不新增按钮，不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 风险预测顾问：`RISK_FORECAST_ADVISOR` 在现有 HUD 文案中提供近期风险预测，输出 `ForecastRisk`、`ForecastFocus`、`ForecastAction` 和 `CashRunwayDays`；核心实现可命名为 `RiskForecastAdvisor` 或 `ComputeForecastRisk`。它面向现金续航、财政、基础设施、服务和交通风险给出一个焦点与行动建议，不新增按钮、不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 预算拆解顾问：`BUDGET_BREAKDOWN_ADVISOR` 在现有目标/警报/财政文案区域提供预算压力拆解和财政顾问口径，输出 `BudgetStress`、`BudgetFocus`、`BudgetDriver` 与 `BudgetAction`；核心实现可命名为 `BudgetBreakdownAdvisor` 或 `ComputeBudgetBreakdown`。它根据现金/赤字、债务、政策执行、建筑维护、公共服务容量、水电/污水/雨洪、公交/货运/通信/邮政、道路维护/停车/回收等既有指标判断主要财政压力来源，并给出短行动建议；不新增按钮、不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 片区优先级顾问：`DISTRICT_PRIORITY_ADVISOR` 在现有目标/警报文案区域提供片区/系统优先级顾问口径，输出 `DistrictPriorityScore`、`DistrictPriorityFocus`、`DistrictPriorityDriver` 与 `DistrictPriorityAction`；核心实现可命名为 `DistrictPriorityAdvisor` 或 `ComputeDistrictPriority`。它基于现有指标选择当前最需要治理的片区或系统优先级，覆盖交通瓶颈、服务公平/服务缺口、住房/居住成本、财政/预算压力、水电污水雨洪、公共安全/消防警务医疗、商品物流/供应链、宜居/环境等，并给出短行动建议；只在优先级偏高或有风险时显示，不新增按钮、不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 道路层级顾问：`ROAD_HIERARCHY_ADVISOR` 在现有目标/警报文案区域提供道路层级/瓶颈升级顾问口径，输出 `RoadHierarchyPressure`、`RoadHierarchyFocus`、`RoadHierarchyDriver` 与 `RoadHierarchyAction`；核心实现可命名为 `RoadHierarchyAdvisor` 或 `ComputeRoadHierarchyAdvice`。它基于既有道路/交通指标选择当前最该处理的交通层级问题，覆盖主干道不足、断头路、路网连通不足、路口延误、道路瓶颈、拥堵、公交候车/运力、停车压力、事故/养护等，并给出短行动建议；只在压力偏高或有风险时显示，不新增按钮、不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 通勤走廊顾问：`COMMUTE_CORRIDOR_ADVISOR` 在现有目标/警报文案区域提供通勤走廊建议口径，输出 `CommuteCorridorScore`、`CommuteCorridorFocus`、`CommuteCorridorDriver` 与 `CommuteCorridorAction`；核心实现可命名为 `CommuteCorridorAdvisor` 或 `ComputeCommuteCorridorAdvice`。它基于住岗平衡、通勤效率、汽车依赖、公交覆盖/可靠性/候车压力、停车压力、路网连通、道路瓶颈、货运满载和区域连接选择当前最该调整的移动走廊，并生成 `CommuteCorridorText` 进入 `ObjectiveInsightParts`；不新增按钮、不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`。
+- 住房负担/宜居迁入顾问：`HOUSING_AFFORDABILITY_ADVISOR` 在现有目标/警报文案区域提供住房负担和迁入稳定建议口径，输出 `HousingAffordabilityScore`、`HousingAffordabilityFocus`、`HousingAffordabilityDriver` 与 `HousingAffordabilityAction`；核心实现可命名为 `HousingAffordabilityAdvisor` 或 `ComputeHousingAffordabilityAdvice`。它基于 `RentPressure`、住房容量/人口缺口、住宅分区、混合用地、高密住宅建筑、平均地价、税率、公交覆盖、服务公平、`LivingCondition`、`LivingPressure`、住岗平衡和保障住房政策选择当前最该处理的住房/宜居迁入问题，并生成 `HousingAffordabilityText` 进入 `ObjectiveInsightParts`；不新增建筑、不新增按钮、不增加 HUD 状态格、不改变 38/48/33，不引入 workers、TS/Vite、WebGL2 或 SharedArrayBuffer，也不修改 `miniprogram/game.json`。
+- 经济专精顾问：`ECONOMIC_SPECIALIZATION_ADVISOR` 在现有目标/警报文案区域提供经济专精建议口径，输出 `EconomicSpecializationScore`、`EconomicSpecializationFocus`、`EconomicSpecializationDriver` 与 `EconomicSpecializationAction`；核心实现可命名为 `EconomicSpecializationAdvisor` 或 `ComputeEconomicSpecializationAdvice`。它基于 `BusinessEfficiency`、`InnovationCapacity`、`OfficeJobs`、`WorkforceSkill`、`AdvancedEducationCoverage`、`IndustrialSpecialization`、`ResourceSpecialization`、`LocalGoodsSupply`、`GoodsBalance`、`SupplyChainStability`、`LogisticsCoverage`/`LogisticsUtilization`、`Attractiveness`、`Visitors`、`TourismIncome`、`MixedUseBuildings` 和 `RegionalConnectivity` 判断当前最适合推进资源工业、物流供应链、办公创新、旅游会展或混合商业哪条经济线，并生成 `EconomicSpecializationText` 进入 `ObjectiveInsightParts`；不新增建筑、不新增按钮、不增加 HUD 状态格、不改变 38/48/33，不引入 workers、TS/Vite、WebGL2 或 SharedArrayBuffer，也不修改 `miniprogram/game.json`。
+- 城市事件摘要：`CITY_EVENT_DIGEST` 在现有 HUD 目标/警报文案中展示近期 `RecentEvents` / `EventDigest`；事件写入入口可用 `AddCityEvent`、`PushCityEvent` 或同义名，摘要文案可用 `BuildEventDigestText` 或同义名。它用于提示最近建造、政策、存读档和系统事件，不新增按钮、不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 需求驱动分析：`DEMAND_DRIVER_ANALYSIS` 在现有 HUD 文案中展示 `DemandFocus`、`DemandDriver`、`DemandAction` 与 `DemandUrgency`；它从住宅、商业、混合、办公、工业、服务和设施需求中选择最紧迫项，解释为什么高，并给出短行动建议。不新增按钮、不增加 HUD 状态格，不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 洞察优先栈：`HUD_INSIGHT_PRIORITY_STACK` 是右侧目标/警报文案的洞察优先栈，不新增功能按钮、不增加 HUD 状态格；它将 `RISK_FORECAST_ADVISOR`、`BUDGET_BREAKDOWN_ADVISOR`、`DISTRICT_PRIORITY_ADVISOR`、`ROAD_HIERARCHY_ADVISOR`、`COMMUTE_CORRIDOR_ADVISOR`、`HOUSING_AFFORDABILITY_ADVISOR`、`ECONOMIC_SPECIALIZATION_ADVISOR`、`DEMAND_DRIVER_ANALYSIS`、`CITY_EVENT_DIGEST` 等现有顾问信息作为候选，`ObjectiveHint` 保持第一优先级，其他 insight 按风险、压力和事件重要性排序或限量展示少量最高优先级条目，以降低横屏右侧拥挤；不改变 38/48/33，也不修改 `miniprogram/game.json`
+- 功能缓冲：拖拽分区时显示缓冲风险，工业/设施贴近住宅、混合用地或办公会形成用地冲突；公共服务区可作为缓冲，用地冲突影响幸福度、评分、需求、服务压力和功能缓冲目标
+- 发展品质：已开发建筑根据区位适配、道路连接、服务、污染和成熟度形成城市级发展品质，影响幸福度、评分、需求、服务压力、告警和优质片区目标
+- 用地效率：统计已开发分区面积和空置分区面积，鼓励紧凑开发并提示过量空置分区
+- 高密自然开发：租金压力较高时，住宅分区可自然长出公寓楼
+- 道路分级、连通性与交通瓶颈：普通路可升级为主干道，用更高维护费换更高通行容量；断头路、交叉口和接路率会形成路网连通性；`IntersectionDelay` 和 `RoadBottleneckPressure` 会把交叉口密度、断头路、拥堵、主干道骨架和连通性转化为路口延误/道路瓶颈，接入 HUD、告警和 `traffic_flow` 目标
+- 道路养护与事故风险：道路养护站覆盖道路网络，服务预算和维护状态影响养护效率；拥堵、断头路、复杂交叉口和低养护会推高事故风险，事故风险会增加道路负载并压低安全评分
+- 财政信用与债务压力：现金缓冲、月净收支、市政支出、市政债券和行政效率形成财政信用；市政厅提供行政效率并降低正向政策执行成本，赤字、低现金、负现金和债券本金推高债务压力，影响幸福度、评分和发展信心；债务服务费过高、行政效率偏低或政策执行过载会触发告警
+- 公交覆盖、运力与候车压力：街区公交站降低覆盖内建筑的交通负载，中后期轨道交通站提供更高覆盖和运力，后期城际枢纽提供外部连接；本轮不新增客运建筑，公交站、轨道交通站和城际枢纽共同扩展为 `TransitReliability`、`TransitWaitPressure` 和 `ComputeTransitWaitPressure` 口径。容量不足时公交可靠性下降，有效覆盖打折并重新推高拥堵；候车压力会影响通勤效率、汽车依赖、幸福度、城市评分和服务需求，同时提供公交热力图、HUD 公交项、“公交可靠性偏低”“公交候车压力偏高”告警和 `transit_reliability` 里程碑
+- 货运覆盖与运力：货运站降低商业/工业货流压力，提高工业发展质量；资源加工园不新增建筑类型，使用丘陵、工业地块和货运可达性形成 `ResourcePotential`，再结合水电可靠性和人才水平转化为 `ResourceSpecialization`、本地商品供给和 `IndustrialSpecialization`；配送中心使用货运覆盖、水电可靠性和货运满载率形成仓储缓冲与供应链稳定；货运铁路站提供后期大运量物流和铁路导入商品；容量不足时有效覆盖下降并重新推高道路负载，同时提供货运热力图
+- 通信覆盖与企业效率：通信枢纽覆盖住宅、商业、办公、混合用地和工业活动，研发园区依赖通信、高等教育和水电可靠性形成创新能力；容量不足时通信可靠性下降，并影响商业/办公需求、生产率奖金、税收质量和城市评分
+- 邮政服务：新增 `post_office` 邮政局口径，覆盖住宅、商业、办公、混合用地、工业和地标建筑的邮件需求；`MailCoverage`、`MailLoad`、`MailCapacity`、`MailUtilization`、`MailReliability` 和 `MailAccess` 进入 HUD、需求、税收质量、告警与 `mail_service` 里程碑；缺口提示“缺少邮政服务”“邮政容量不足”“邮件配送受阻”
+- 混合用地：混合街区同时提供住房和岗位，需求受住宅/商业压力、地价、公交、服务和治安影响，并提供混合核心里程碑
+- 办公与知识经济：共享办公楼提供高密岗位，研发园区提供创新能力；办公需求受教育、创新能力、地价、公交和治安影响，并提供知识经济与创新高地里程碑
+- 城市吸引力：城市广场、会展中心、公园、服务、公交、外部连接、地价和混合街区提高吸引力，污染、拥堵和犯罪压力降低吸引力，并带来游客与旅游收入；会展中心会额外制造游客停车需求
+- 商品供需：工业区、资源加工园、货运铁路站和外部连接提供商品，配送中心提供仓储缓冲和供应链稳定，商业、居民和游客消耗商品；货运、水电可靠性、铁路导入、仓储调度、人才和资源适配影响可用供给，短缺会压低商业发展并推动工业补供；商品 HUD 需要显示资源适配，资源适配不足时用告警提示玩家补齐丘陵/工业地块/货运可达条件
+- 劳动力素质：教育覆盖、高等教育覆盖、办公岗位、创新能力和建筑成长提高人才水平，岗位扩张过快会产生用工缺口，并影响税收质量、城市评分和发展需求
+- 学位压力与学习通道：学校和社区学院形成 `EducationLoad`、`EducationCapacity`、`EducationUtilization`、`StudentBacklog` 与 `LearningPipeline`；教育容量进入 HUD、服务需求、商业/办公/工业需求、劳动力素质、生产率奖金、建筑成长、告警和 `education_capacity` 里程碑
+- 通勤效率：住岗平衡、公交覆盖、公交可靠性、低候车压力、外部连接、混合街区、主干道和路网连通性提高通勤效率，拥堵、道路瓶颈、候车压力和断路建筑降低通勤效率；汽车依赖会影响幸福度、城市评分和发展需求
+- 停车压力：高汽车依赖、商业/办公出行、会展客流和拥堵会造成找车位压力，公交、路网连通、混合街区、紧凑用地、停车收费和邻里停车楼可缓解；停车楼提供覆盖热力、容量和满载率，停车收费在公交覆盖、路网和停车覆盖足够时轻微降低汽车依赖与停车压力，压力过高会增加绕行交通并影响幸福度、吸引力和商业/办公发展
+- 雨洪韧性：人口、岗位、道路、已开发分区、工业活动和地形暴露会形成雨洪负荷，公园、完整街道和雨水花园可降低内涝风险；风险过高会影响环境质量、公共健康、幸福度、城市评分和基础设施需求
+- 步行可达性：连通路网、公交、服务、公园、紧凑用地、混合街区和完整街道提高步行可达性，汽车依赖和拥堵会压低可达性；信号优化降低交叉口拥堵和事故风险，拥堵收费降低拥堵、汽车依赖和停车压力，停车收费在替代条件达标时轻微降低汽车依赖和停车压力；可达性影响幸福度、需求和步行城市/完整街道/信号优化/拥堵收费/停车收费里程碑
+- 环境质量：污染、噪声、汽车依赖、污水过载和内涝风险降低环境质量；公园、回收覆盖、污水处理、公交、绿色规范、完整街道和雨洪韧性改善环境或降低噪声，并影响宜居需求、幸福度和城市评分
+- 公共健康：医疗覆盖、区域医院、医疗响应、生命关怀、环境质量、回收覆盖、污水处理、水电可靠性和雨洪韧性提高公共健康；污染、噪声、内涝风险、设施短缺、病患积压和死亡压力提高健康风险，并影响迁入速度、幸福度和城市评分
+- 宜居度与生活压力：`LivingCondition` 综合服务、公园、教育、生命关怀、公交、通勤、步行、环境、公共健康和水电可靠性；`LivingPressure` 汇总居住成本、治安、健康风险、噪声、道路瓶颈、候车压力和服务不均。宜居度进入 HUD、幸福度、城市评分、住宅/混合/服务需求、告警和 `livable_district` 里程碑
+- 水电、污水与雨洪韧性：电站、太阳能阵列和水塔提供水电容量，污水处理站提供排水处理容量，雨水花园提供雨洪容量；HUD 显示可靠性、满载率、污水满载率和内涝风险，容量吃紧会触发告警和韧性目标，清洁电力目标鼓励中期补足零污染供电
+- 警务覆盖与执法容量：社区警务站降低犯罪压力并纳入服务热力图；`police_precinct` 警署作为中后期容量节点，形成 `SecurityLoad`、`SecurityCapacity`、`SecurityUtilization`、`PoliceResponse` 与 `CaseBacklog`，容量不足、响应偏低或案件积压偏高分别触发“警务容量不足”“警务响应偏低”“案件积压偏高”，并进入 `police_readiness` 里程碑
+- 公共服务容量：医疗、教育、消防、警务、应急避难和生命关怀服务需要满足城市负载；容量不足时有效覆盖下降并触发扩建压力。医疗容量不足会压低 `MedicalResponse` 并推高 `PatientBacklog`，教育容量不足会推高 `StudentBacklog` 并压低 `LearningPipeline`，警务容量不足时还会压低 `PoliceResponse` 并推高 `CaseBacklog`
+- 医疗容量：社区诊所和区域医院不新增建筑数量，但会扩展为诊疗容量口径；`HealthLoad`、`HealthCapacity`、`HealthUtilization`、`MedicalResponse` 和 `PatientBacklog` 进入 HUD、公共健康、健康风险、服务需求、告警与 `healthcare_capacity` 里程碑；容量不足、响应偏低或病患积压偏高分别触发“医疗容量不足”“医疗响应偏低”“病患积压偏高”
+- 教育容量：社区学校和社区学院不新增建筑数量，但会扩展为学位容量口径；`EducationLoad`、`EducationCapacity`、`EducationUtilization`、`StudentBacklog` 和 `LearningPipeline` 进入 HUD、服务需求、人才、生产率、需求、告警与 `education_capacity` 里程碑；容量不足、入学积压偏高或学习通道偏弱分别触发“教育容量不足”“入学积压偏高”“学习通道偏弱”
+- 消防韧性：社区消防站从覆盖口径扩展到 `FireRisk`、`FireProtection`、`FireLoad`、`FireCapacity`、`FireUtilization`、`FireResponse` 和 `FireProtectionAccess`；覆盖不足、容量不足或火灾风险偏高分别触发“缺少消防覆盖”“消防容量不足”“火灾风险偏高”，并进入 `fire_resilience` 目标
+- 生命关怀：新增 `memorial_garden` 纪念花园口径，覆盖生命关怀敏感建筑；`DeathcareCoverage`、`DeathcareLoad`、`DeathcareCapacity`、`DeathcareUtilization`、`MortalityPressure` 和 `DeathcareAccess` 进入 HUD、服务需求、公共健康、告警与 `deathcare_ready` 里程碑；缺口提示“缺少生命关怀”“生命关怀容量不足”“死亡压力偏高”
+- 服务公平：住宅片区需要均衡获得公园、医疗、教育、公交、消防、警务、回收、通信、邮政和生命关怀可达性；`SERVICE_EQUITY_GAP_SOURCES` 从住宅敏感建筑的覆盖缺失按容量加权估算主要服务缺口来源，HUD 显示服务不足人口与主要服务缺口来源；分布不均会影响幸福度、评分、发展需求和服务扩建压力
+- 应急响应与灾备：医疗覆盖、医疗响应、消防、警务覆盖、警务响应、服务可靠性和路网连通性提高响应效率；`emergency_shelter` 应急避难中心使用 Services overlay，把避难容量、应急响应、雨洪韧性、水电可靠性、路网连通和维护状态转化为 `DisasterPreparedness`（灾备）并降低 `DisasterRisk`（灾害风险）；拥堵、断头路、过载和未接路建筑会拖慢响应并影响治安、健康和评分
+- 城市运维：现金缓冲、服务预算、服务负载、水电负载和拥堵决定维护状态；维护不足会折损服务可靠性并影响幸福度、评分和服务需求
+- 回收覆盖与容量：回收处理站和垃圾发电厂降低垃圾污染压力，容量不足时有效覆盖下降并触发扩建压力；垃圾发电厂同时提供供电，但带来污染、噪声、用水、维护费和交通压力；系统提供回收热力图
+- 建筑成长：住宅、商业、混合用地、办公和工业根据地价、公交、接路、发展品质与年龄自然升级
+- 建筑预览：所有可建建筑在落点前都应给出成本/占地/失败原因和“选址诊断”；诊断按住宅、公寓、商业、混合、办公/研发、工业/资源、物流、通信/邮政、公共服务、停车、雨洪、水电/污水/回收等类型突出最关键的 1-2 个优势或短板，帮助玩家理解为什么此处适合或不适合
+- 居住成本压力：住房紧张、地价和税率会推高成本，公交、服务和住宅供给可缓解
+- 高容量公寓楼：中期住宅建筑，用更高维护/水电/交通换取更大住房供给
+- 政策预览：城市政策按钮切换后，玩家应立即看到 `PolicyImpactPreview` 的启用/关闭状态和关键指标 delta，而不必等到下个月结算；右侧预览应解释财政、拥堵、停车、步行、安全、雨洪和政策积压的方向性变化
+- 目标行动建议：玩家查看当前未完成目标时，应在既有目标说明后看到一条可执行的“建议：...”短句；建议只描述下一步方向，不增加新的交互控件或 HUD 状态槽
+- 警报摘要：玩家应在右侧警报栏优先看到最需要处理的少量告警；当完整告警列表更多时用 `+N` 告知仍有未展示告警，避免长列表挤压目标、预览、工具和底部 33 项状态。
+- 风险预测顾问：玩家应在既有目标、警报、预览或顶部财政文案里看到近期 `ForecastRisk`、`ForecastFocus`、`ForecastAction` 和 `CashRunwayDays`，用于提前处理现金续航、财政、基础设施、服务或交通风险；它不是新按钮、不是新 HUD 状态槽，也不改变 38/48/33。
+- 预算拆解顾问：玩家应在既有目标、警报或顶部财政文案里看到 `BUDGET_BREAKDOWN_ADVISOR` 的 `BudgetStress`、`BudgetFocus`、`BudgetDriver` 与 `BudgetAction`，理解预算压力主要来自现金/赤字、债务、政策执行、建筑维护、公共服务容量、水电/污水/雨洪、公交/货运/通信/邮政、道路维护/停车/回收中的哪一类，并获得一句短行动建议；它不是新按钮、不是新 HUD 状态槽，也不改变 38/48/33 或 `miniprogram/game.json`。
+- 片区优先级顾问：玩家应在既有目标或警报文案里看到 `DISTRICT_PRIORITY_ADVISOR` 的 `DistrictPriorityScore`、`DistrictPriorityFocus`、`DistrictPriorityDriver` 与 `DistrictPriorityAction`，理解当前最高优先级来自交通瓶颈、服务公平/服务缺口、住房/居住成本、财政/预算压力、水电污水雨洪、公共安全/消防警务医疗、商品物流/供应链、宜居/环境中的哪一类，并获得一句短行动建议；它只在优先级偏高或有风险时出现，不是新按钮、不是新 HUD 状态槽，也不改变 38/48/33 或 `miniprogram/game.json`。
+- 道路层级顾问：玩家应在既有目标或警报文案里看到 `ROAD_HIERARCHY_ADVISOR` 的 `RoadHierarchyPressure`、`RoadHierarchyFocus`、`RoadHierarchyDriver` 与 `RoadHierarchyAction`，理解当前最该处理的是主干道不足、断头路、路网连通不足、路口延误、道路瓶颈、拥堵、公交候车/运力、停车压力、事故/养护中的哪一类，并获得一句短行动建议；它只在压力偏高或有风险时出现，不是新按钮、不是新 HUD 状态槽，也不改变 38/48/33 或 `miniprogram/game.json`。
+- 通勤走廊顾问：玩家应在既有目标或警报文案里看到 `COMMUTE_CORRIDOR_ADVISOR` 的 `CommuteCorridorScore`、`CommuteCorridorFocus`、`CommuteCorridorDriver` 与 `CommuteCorridorAction`，理解当前移动问题更像住岗错配、公交通勤、停车搜索、换乘连通、货运走廊或外部连接中的哪一类，并获得一句短行动建议；它只作为右侧 `ObjectiveInsightParts` 候选出现，不是新按钮、不是新 HUD 状态槽，也不改变 38/48/33 或 `miniprogram/game.json`。
+- 住房负担/宜居迁入顾问：玩家应在既有目标或警报文案里看到 `HOUSING_AFFORDABILITY_ADVISOR` 的 `HousingAffordabilityScore`、`HousingAffordabilityFocus`、`HousingAffordabilityDriver` 与 `HousingAffordabilityAction`，理解当前迁入受阻更像租金压力、住房容量缺口、缺少住宅/混合/高密供给、地价/税率、公交/服务公平、宜居/生活压力、住岗错配或保障住房政策未覆盖中的哪一类，并获得一句短行动建议；它只作为右侧 `ObjectiveInsightParts` 候选出现，不是新按钮、不是新 HUD 状态槽，不新增建筑、workers、TS/Vite、WebGL2 或 SharedArrayBuffer，也不改变 38/48/33 或 `miniprogram/game.json`。
+- 经济专精顾问：玩家应在既有目标或警报文案里看到 `ECONOMIC_SPECIALIZATION_ADVISOR` 的 `EconomicSpecializationScore`、`EconomicSpecializationFocus`、`EconomicSpecializationDriver` 与 `EconomicSpecializationAction`，理解当前经济扩张更适合资源工业、物流供应链、办公创新、旅游会展或混合商业中的哪一条线，并获得一句“经济:专... -> ...”短行动建议；它只作为右侧 `ObjectiveInsightParts` 候选出现，不是新按钮、不是新 HUD 状态槽，不新增建筑、workers、TS/Vite、WebGL2 或 SharedArrayBuffer，也不改变 38/48/33 或 `miniprogram/game.json`。
+- 城市事件摘要：玩家应在既有目标或警报文案附近看到近期城市事件摘要，例如最近建造、政策切换、存读档或系统提示；它复用同一信息区域，不新增按钮、弹窗或 HUD 状态槽，也不改变 38/48/33。
+- 需求驱动分析：玩家应能看到最高需求对应的焦点、驱动原因和行动建议，例如“住宅/居住成本高 -> 补住宅或公寓”；该提示复用现有目标/警报文案区域，不新增交互控件或 HUD 状态槽。
+- 洞察优先栈：玩家在右侧应优先看到当前 `ObjectiveHint`，随后只看到少量由 `HUD_INSIGHT_PRIORITY_STACK` 选出的高优先级 insight；风险、预算压力、片区优先级、道路层级、通勤走廊、住房负担、经济专精、需求驱动和城市事件都可以成为候选，但不会同时无限堆叠到右侧，也不会新增按钮或 HUD 状态槽。
+- 九项城市政策：绿色规范、公交优先、增长补贴、保障住房、交通安全行动、完整街道、信号优化、拥堵收费、停车收费；完整街道同时缓解汽车依赖、停车压力、事故风险和雨洪负荷，信号优化缓解交叉口拥堵与路口延误并提高道路安全，拥堵收费以政策收入和幸福度取舍换取更低拥堵、汽车依赖、停车压力和局部延误，停车收费在人口 >= 140 且道路 >= 8 时带来停车收费收入，在公交覆盖、路网和停车覆盖足够时轻微降低汽车依赖与停车压力，公交替代不足且停车压力仍高时触发“停车收费阻力”，行政效率会压低正向政策执行成本
+- 行政容量：市政厅不新增建筑数量，但会扩展为行政容量口径；`AdministrationLoad`、`AdministrationCapacity`、`AdministrationUtilization` 和 `PolicyBacklog` 进入 HUD 顶栏、政策成本、幸福度、城市评分、服务需求、告警与 `administration_capacity` 里程碑；行政容量不足或政策积压偏高分别触发“行政容量不足”“政策积压偏高”
+- 低/标准/高税率档位：在短期收入、幸福度和发展需求之间取舍
+- 核心数值：现金、人口、幸福度、拥堵、污染、路网连通性、断头路、`IntersectionDelay`、`RoadBottleneckPressure`、步行可达性、道路养护覆盖、事故风险、道路安全、财政信用、行政效率、债务压力、债券本金、债务服务费、用地效率、空置分区、发展品质、用地冲突、混合用地建筑、办公岗位、劳动力素质、高等教育覆盖、教育负载/容量/满载率、入学积压、学习通道、创新能力、用工缺口、生产率奖金、通信覆盖/容量/满载率、邮政覆盖/负载/容量/满载率/可靠性、企业效率、商品供给、`ResourcePotential`、`ResourceSpecialization`、`IndustrialSpecialization`、本地供给、铁路导入、仓储容量、供应链稳定、商品需求、商品平衡、`EconomicSpecializationScore`、`EconomicSpecializationFocus`、`EconomicSpecializationDriver`、`EconomicSpecializationAction`、住岗平衡、通勤效率、汽车依赖、停车压力、停车覆盖/容量/满载率、雨洪负载/容量/满载率/韧性、内涝风险、服务公平、服务不足人口、主要服务缺口来源、`LivingCondition`、`LivingPressure`、`HousingAffordabilityScore`、`HousingAffordabilityFocus`、`HousingAffordabilityDriver`、`HousingAffordabilityAction`、环境质量、噪声压力、公共健康、健康风险、应急响应、灾备、灾害风险、`BuildingSiteScore`、`SiteDiagnosis`、`HealthLoad`、`HealthCapacity`、`HealthUtilization`、`MedicalResponse`、`PatientBacklog`、`EducationLoad`、`EducationCapacity`、`EducationUtilization`、`StudentBacklog`、`LearningPipeline`、`FireRisk`、`FireProtection`、`FireLoad`、`FireCapacity`、`FireUtilization`、`FireResponse`、`DeathcareCoverage`、`DeathcareLoad`、`DeathcareCapacity`、`DeathcareUtilization`、`MortalityPressure`、`SecurityLoad`、`SecurityCapacity`、`SecurityUtilization`、`PoliceResponse`、`CaseBacklog`、城市维护状态、水电可靠性、水电满载率、清洁电力目标、污水处理负载/容量/满载率/可靠性、居住成本、治安压力、城市吸引力、游客、旅游收入、会展客流目标、外部连接、公共服务容量、公园覆盖、医疗覆盖、区域医疗目标、`healthcare_capacity` 医疗容量目标、灾害准备目标、教育覆盖、`education_capacity` 学位容量目标、消防覆盖、生命关怀覆盖、警务响应目标、公交覆盖/运力/可靠性/候车压力、`transit_reliability` 公交可靠性目标、货运覆盖/运力、回收覆盖/容量/满载率/可靠性、月净收支、市政中心目标、创新高地目标、本地供给目标、`specialized_industry` 产业专精目标、供应链缓冲目标、铁路货运目标、`mail_service` 邮政服务目标、`fire_resilience` 消防韧性目标、`deathcare_ready` 生命关怀目标、`police_readiness` 警务响应目标、`livable_district` 宜居街区目标和区域门户目标
+- 本地存档与分享入口
+
+## 非目标
+- 不复刻任何现有城市建造游戏的名称、美术、UI、任务或数值。
+- 首版不做逐车模拟、不做云存档、不接广告和支付。

@@ -1,0 +1,12 @@
+{
+  "name": "pocket-city-planner-unity",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Unity-first WeChat mini game project for Pocket City Planner.",
+  "type": "module",
+  "scripts": {
+    "verify": "node tools/verify-unity-scaffold.mjs --mode=scaffold",
+    "verify:scaffold": "node tools/verify-unity-scaffold.mjs --mode=scaffold",
+    "verify:exported": "node tools/verify-unity-scaffold.mjs --mode=exported"
+  }
+}

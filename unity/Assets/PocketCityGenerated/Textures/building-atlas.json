@@ -1,0 +1,33 @@
+{
+  "image": "building-atlas.png",
+  "size": { "width": 2048, "height": 2048 },
+  "grid": { "columns": 8, "rows": 8, "cellWidth": 256, "cellHeight": 256 },
+  "pivot": "bottom-center",
+  "style": "bright low-poly orthographic isometric city builder buildings",
+  "sprites": [
+    { "name": "small_house", "cell": [0, 0], "rect": [0, 0, 256, 256] },
+    { "name": "apartment_block", "cell": [1, 0], "rect": [256, 0, 256, 256] },
+    { "name": "shop", "cell": [2, 0], "rect": [512, 0, 256, 256] },
+    { "name": "office_building", "cell": [3, 0], "rect": [768, 0, 256, 256] },
+    { "name": "factory", "cell": [4, 0], "rect": [1024, 0, 256, 256] },
+    { "name": "park_pavilion", "cell": [5, 0], "rect": [1280, 0, 256, 256] },
+    { "name": "city_hall", "cell": [6, 0], "rect": [1536, 0, 256, 256] },
+    { "name": "clinic", "cell": [7, 0], "rect": [1792, 0, 256, 256] },
+    { "name": "hospital", "cell": [0, 1], "rect": [0, 256, 256, 256] },
+    { "name": "school", "cell": [1, 1], "rect": [256, 256, 256, 256] },
+    { "name": "industrial_workshop", "cell": [2, 1], "rect": [512, 256, 256, 256] },
+    { "name": "water_tower", "cell": [3, 1], "rect": [768, 256, 256, 256] },
+    { "name": "power_station", "cell": [4, 1], "rect": [1024, 256, 256, 256] },
+    { "name": "bus_hub", "cell": [5, 1], "rect": [1280, 256, 256, 256] },
+    { "name": "metro_station", "cell": [6, 1], "rect": [1536, 256, 256, 256] },
+    { "name": "suburban_house", "cell": [7, 1], "rect": [1792, 256, 256, 256] },
+    { "name": "cargo_depot", "cell": [0, 2], "rect": [0, 512, 256, 256] },
+    { "name": "city_park", "cell": [1, 2], "rect": [256, 512, 256, 256] },
+    { "name": "recycling_center", "cell": [2, 2], "rect": [512, 512, 256, 256] },
+    { "name": "fire_station", "cell": [3, 2], "rect": [768, 512, 256, 256] },
+    { "name": "police_station", "cell": [4, 2], "rect": [1024, 512, 256, 256] },
+    { "name": "commercial_block", "cell": [5, 2], "rect": [1280, 512, 256, 256] },
+    { "name": "starter_home", "cell": [6, 2], "rect": [1536, 512, 256, 256] },
+    { "name": "rain_garden", "cell": [7, 2], "rect": [1792, 512, 256, 256] }
+  ]
+}

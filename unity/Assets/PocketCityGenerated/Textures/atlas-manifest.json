@@ -1,0 +1,16 @@
+{
+  "atlases": [
+    { "id": "terrain", "image": "terrain-atlas.png", "config": "terrain-atlas.json" },
+    { "id": "building", "image": "building-atlas.png", "config": "building-atlas.json" },
+    { "id": "ui", "image": "ui-atlas.png", "config": "ui-atlas.json" },
+    { "id": "formal-ui-mockup", "image": "formal-ui-mockup.png", "config": null },
+    { "id": "building-icons", "image": "building-icons.png", "source": "building-icons-ai-source.png" },
+    { "id": "loading-background", "image": "loading-background.png", "source": "loading-background-ai-source.png" }
+  ],
+  "notes": [
+    "The terrain, building, and UI atlases are 2048x2048 PNG files laid out on a 256x256 grid.",
+    "building-icons.png is the formal 1024x640 RGBA building icon sheet generated with gpt-image-2 and normalized to the existing Unity asset contract.",
+    "loading-background.png is the formal 1024x576 loading screen background generated with gpt-image-2 from a 16:9 source.",
+    "formal-ui-mockup.png is a 2048x1152 production UI reference for the playable first-screen layout."
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "description": "Pocket City Planner WeChat Mini Game",
+  "compileType": "game",
+  "setting": {
+    "urlCheck": true,
+    "es6": true,
+    "enhance": true,
+    "postcss": false,
+    "minified": true,
+    "coverView": true
+  },
+  "appid": "touristappid",
+  "projectname": "pocket-city-planner",
+  "libVersion": "3.8.0",
+  "condition": {}
+}

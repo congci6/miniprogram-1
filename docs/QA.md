@@ -1,0 +1,240 @@
+# QA 清单
+
+## 静态校验
+- 运行 `npm.cmd run verify`。
+- 确认根目录没有 active TS/Vite 入口。
+- 确认 `miniprogram/game.json` 没有 `workers` 字段。
+- 确认 `npm.cmd run verify` 会拦截 `workers`、`texImage3D`、`SharedArrayBuffer`、`createImageBitmap` 和 Worker 入口，避免旧 WebGL/Worker 问题回潮。
+- 确认消防韧性已由 `npm.cmd run verify` 检查 `FireRisk`、`FireProtection`、`FireLoad`、`FireCapacity`、`FireUtilization`、`FireResponse`、`FireProtectionAccess`、`ConnectedFireBuildings`、`FireCapacityForBuildings`、`FireBuildingCapacity`、`FireRiskForBuilding`、`ApplyFireProtectionTileAccess`、`ComputeFireRisk`、`ComputeFireResponse` 和 `fire_resilience`。
+- 确认生命关怀已由 `npm.cmd run verify` 检查 `memorial_garden`、`DeathcareCoverage`、`DeathcareLoad`、`DeathcareCapacity`、`DeathcareUtilization`、`MortalityPressure`、`DeathcareAccess`、`ConnectedDeathcareBuildings`、`DeathcareCapacityForBuildings`、`DeathcareBuildingCapacity`、`DeathcareWeightForBuilding`、`ApplyDeathcareTileAccess`、`IsDeathcareBuilding`、`IsDeathcareSensitiveBuilding`、`ComputeMortalityPressure`、`deathcare_ready` 以及“缺少生命关怀”“生命关怀容量不足”“死亡压力偏高”。
+- 确认医疗容量已由 `npm.cmd run verify` 检查 `HealthLoad`、`HealthCapacity`、`HealthUtilization`、`MedicalResponse`、`PatientBacklog`、`HealthCapacityForBuildings`、`HealthBuildingCapacity`、`ComputeMedicalResponse`、`ComputePatientBacklog`、`healthcare_capacity` 以及“医疗容量不足”“医疗响应偏低”“病患积压偏高”；本轮不新增建筑，建筑数/工具按钮数保持 38/48。
+- 确认警务响应已由 `npm.cmd run verify` 检查 `police_precinct`、`SecurityLoad`、`SecurityCapacity`、`SecurityUtilization`、`PoliceResponse`、`CaseBacklog`、`SecurityCapacityForBuildings`、`SecurityBuildingCapacity`、`ComputePoliceResponse`、`ComputeCaseBacklog`、`police_readiness` 以及“警务容量不足”“警务响应偏低”“案件积压偏高”。
+- 确认选址诊断相关标识 `BuildingSiteScore`、`SiteDiagnosis` 和中文“选址诊断”只出现在建筑预览/诊断口径中；本轮不新增建筑、不新增工具按钮、不修改 `miniprogram/game.json`，建筑数/工具按钮数/HUD 状态数保持 38/48/33。
+- 确认 `BUILDING_VISUAL_PREFAB_LIBRARY` 只属于 Unity 渲染层：按 `ModelKey`/建筑类型生成低多边形程序外观，38 个建筑都有 fallback；不得新增建筑数量、不得修改 `miniprogram/game.json`、不得引入 worker。
+- 确认 `OBJECTIVE_ACTION_ADVICE` 只用于当前目标/里程碑面板文案，在原目标 hint 后追加“建议：...”短提示；它不应新增按钮、不应增加 HUD 状态格，也不应修改 38/48/33 数量口径。
+- 确认 `ALERT_PRIORITY_DIGEST` 只用于 HUD 视图层右侧警报栏摘要：展示列表可按严重度排序和截断，溢出用 `+N` 表示，但底层 `Metrics.Alerts` 必须保留完整告警列表；该能力不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `RISK_FORECAST_ADVISOR` 已由 `npm.cmd run verify` 检查 `ForecastRisk`、`ForecastFocus`、`ForecastAction`、`CashRunwayDays`，以及 `RiskForecastAdvisor` / `ComputeForecastRisk` 其中之一；该能力只复用现有 HUD 文案行，不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `BUDGET_BREAKDOWN_ADVISOR` 已由 `npm.cmd run verify` 检查 `BudgetStress`、`BudgetFocus`、`BudgetDriver`、`BudgetAction`，以及 `BudgetBreakdownAdvisor` / `ComputeBudgetBreakdown` 其中之一；该预算压力拆解/财政顾问口径只复用现有目标/警报/财政文案区域，不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `DISTRICT_PRIORITY_ADVISOR` 静态校验覆盖 `DistrictPriorityScore`、`DistrictPriorityFocus`、`DistrictPriorityDriver`、`DistrictPriorityAction`，以及 `DistrictPriorityAdvisor` / `ComputeDistrictPriority` 其中之一；该片区/系统优先级顾问口径只复用现有目标/警报文案区域，并且只在优先级偏高或有风险时显示，不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `ROAD_HIERARCHY_ADVISOR` 静态校验覆盖 `RoadHierarchyPressure`、`RoadHierarchyFocus`、`RoadHierarchyDriver`、`RoadHierarchyAction`，以及 `RoadHierarchyAdvisor` / `ComputeRoadHierarchyAdvice` 其中之一；该道路层级/瓶颈升级顾问口径只复用现有目标/警报文案区域，并且只在压力偏高或有风险时显示，不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `COMMUTE_CORRIDOR_ADVISOR` 已由 `npm.cmd run verify` 检查 `CommuteCorridorScore`、`CommuteCorridorFocus`、`CommuteCorridorDriver`、`CommuteCorridorAction`、`CommuteCorridorText`、`CommuteCorridorAdvisor` / `ComputeCommuteCorridorAdvice` 和 `ObjectiveInsightParts` 串联；该通勤走廊顾问只复用现有移动指标和右侧 HUD 洞察栈，不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `CITY_EVENT_DIGEST` 已由 `npm.cmd run verify` 检查 `CITY_EVENT_DIGEST`、`RecentEvents` / `EventDigest`、`AddCityEvent`、`PushCityEvent` 和 `BuildEventDigestText` 同义 marker；该能力只复用现有 HUD 目标/警报文案，不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `DEMAND_DRIVER_ANALYSIS` 已由 `npm.cmd run verify` 检查 `DemandFocus`、`DemandDriver`、`DemandAction`、`DemandUrgency`，以及 `AnalyzeDemandDrivers` / `ComputeDemandInsight` 其中之一；该能力只复用现有 HUD 文案行，不应新增按钮、不应增加 HUD 状态格、不应修改 38/48/33 或 `miniprogram/game.json`。
+- 确认 `BUILDING_UPGRADE_READINESS_ADVISOR` 已由 `npm.cmd run verify` 检查 `BuildingUpgradeReadinessScore`、`BuildingUpgradeReadyCount`、`BuildingUpgradeBlockedCount`、`BuildingUpgradeReadinessFocus`、`BuildingUpgradeReadinessDriver`、`BuildingUpgradeReadinessAction`、`BuildingUpgradeReadinessText` 和 `ObjectiveInsightParts` 串联；该能力只复用单栋建筑升级逻辑和右侧 HUD 洞察栈，不应新增建筑数量、按钮、底部 HUD 统计槽、workers、TS/Vite、WebGL2、SharedArrayBuffer 或 `miniprogram/game.json` 修改。
+- 确认 `HOUSING_AFFORDABILITY_ADVISOR` 已由 `npm.cmd run verify` 检查 `HousingAffordabilityScore`、`HousingAffordabilityFocus`、`HousingAffordabilityDriver`、`HousingAffordabilityAction`、`HousingAffordabilityText`、`HousingAffordabilityAdvisor` / `ComputeHousingAffordabilityAdvice` 和 `ObjectiveInsightParts` 串联；该住房负担/宜居迁入顾问只复用 `RentPressure`、住宅容量/人口缺口、住宅分区/混合/高密供给、地价/税率、公交、服务公平、宜居/生活压力、住岗平衡和 `AffordableHousing` 政策，不应新增建筑、按钮、底部 HUD 状态格、workers、TS/Vite、WebGL2、SharedArrayBuffer 或 `miniprogram/game.json` 修改。
+- 确认 `ECONOMIC_SPECIALIZATION_ADVISOR` 已由 `npm.cmd run verify` 检查 `EconomicSpecializationScore`、`EconomicSpecializationFocus`、`EconomicSpecializationDriver`、`EconomicSpecializationAction`、`EconomicSpecializationText`、`EconomicSpecializationAdvisor` / `ComputeEconomicSpecializationAdvice` 和 `ObjectiveInsightParts` 串联；该经济专精顾问只复用 `BusinessEfficiency`、`InnovationCapacity`、`OfficeJobs`、`WorkforceSkill`、`AdvancedEducationCoverage`、`IndustrialSpecialization`、`ResourceSpecialization`、`LocalGoodsSupply`、`GoodsBalance`、`SupplyChainStability`、`LogisticsCoverage`/`LogisticsUtilization`、`Attractiveness`、`Visitors`、`TourismIncome`、`MixedUseBuildings` 和 `RegionalConnectivity`，不应新增建筑、按钮、底部 HUD 状态格、workers、TS/Vite、WebGL2、SharedArrayBuffer 或 `miniprogram/game.json` 修改。
+- 确认 `HUD_INSIGHT_PRIORITY_STACK` 的静态校验口径只覆盖右侧目标/警报文案的洞察优先栈，不应引入新功能按钮、HUD 状态格、`workers`、TS/Vite 入口或 `miniprogram/game.json` 修改；候选应来自 `RISK_FORECAST_ADVISOR`、`BUDGET_BREAKDOWN_ADVISOR`、`DISTRICT_PRIORITY_ADVISOR`、`ROAD_HIERARCHY_ADVISOR`、`COMMUTE_CORRIDOR_ADVISOR`、`SERVICE_GAP_ADVISOR`、`GROWTH_BOTTLENECK_ADVISOR`、`BUILDING_UPGRADE_READINESS_ADVISOR`、`HOUSING_AFFORDABILITY_ADVISOR`、`ECONOMIC_SPECIALIZATION_ADVISOR`、`DEMAND_DRIVER_ANALYSIS`、`CITY_EVENT_DIGEST` 等现有顾问，`ObjectiveHint` 应保持第一优先级，38/48/33 数量口径不变。
+- 确认 `WECHAT_SAFE_LIFECYCLE_FEEDBACK` 只覆盖微信切后台/暂停自动保存与安全触觉反馈，不应新增 worker、按钮、HUD 状态格或 `miniprogram/game.json` 修改；Editor 下允许回退到 `PlayerPrefs` 与无触觉 fallback。
+
+## Unity Editor 校验
+- 打开 `unity/` 后确认 Console 无 C# 编译错误。
+- 运行 `Pocket City/Create Visual Assets`，确认 `Assets/PocketCityGenerated/` 下生成材质和纹理。
+- 运行 `Pocket City/Create Prototype Scene`。
+- 打开 `Assets/Scenes/PocketCityPrototype.unity`。
+- 进入 Play Mode 后确认城市指标会按天推进。
+- 确认暂停按钮会停止日期推进，倍速按钮会在 1x、2x、4x 和暂停状态间切换。
+- 确认税率按钮会在低、标准、高税率间循环，并改变月净收支、幸福度和住宅/商业/混合用地/办公/工业需求。
+- 确认预算按钮会在标准、加码、紧缩之间循环，并改变服务覆盖效率、公共建筑维护开支、月净收支和服务需求。
+- 确认绿色规范、公交优先、增长补贴、保障住房、交通安全行动、完整街道、信号优化、拥堵收费、停车收费按钮可以切换高亮，并改变 HUD 中的政策数量和政策收支。
+- 点击任一政策按钮后，确认右侧预览面板显示 `PolicyImpactPreview`，明确本次为启用或关闭，并展示月收支、拥堵、停车压力、步行可达性、事故风险、雨洪韧性/内涝风险和政策积压的即时 delta；该校验不应新增政策按钮、工具按钮或底部状态格。
+- 确认保存按钮后重新进入 Play Mode 或点击读取，城市现金、道路、分区和建筑能够恢复。
+
+## 原型场景校验
+- Play Mode 中应看到地形网格、道路、建筑方块、左侧图层按钮、右侧目标/警报和底部两行状态网格。
+- 右侧目标/里程碑面板应保留原目标 hint，并在其后追加 `OBJECTIVE_ACTION_ADVICE` 的“建议：...”行动提示；提示应短到能在右侧检查器内阅读，不应遮挡警报、工具按钮或底部两行 33 项状态网格。
+- 右侧警报栏应使用 `ALERT_PRIORITY_DIGEST` 显示少量最关键告警，按严重度优先展示现金、赤字、水电、污水、雨洪、医疗、消防、警务、灾害、交通和服务缺口等风险；完整告警数量超过展示上限时，末尾应出现 `+N`，且不应挤压目标、预览、工具按钮或底部两行 33 项状态网格。
+- `RISK_FORECAST_ADVISOR` 应在现有目标、警报、预览或顶部财政信息附近显示近期 `ForecastRisk`、`ForecastFocus`、`ForecastAction` 和 `CashRunwayDays`；它不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `BUDGET_BREAKDOWN_ADVISOR` 应在现有目标、警报或顶部财政文案附近显示 `BudgetStress`、`BudgetFocus`、`BudgetDriver` 和 `BudgetAction`；文案应能说明预算压力主要来自现金/赤字、债务、政策执行、建筑维护、公共服务容量、水电/污水/雨洪、公交/货运/通信/邮政、道路维护/停车/回收中的哪一类，并给出短行动建议。它不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `DISTRICT_PRIORITY_ADVISOR` 应只在片区/系统优先级偏高或有风险时，在现有目标或警报文案附近显示 `DistrictPriorityScore`、`DistrictPriorityFocus`、`DistrictPriorityDriver` 和 `DistrictPriorityAction`；文案应说明当前最需要治理的是交通瓶颈、服务公平/服务缺口、住房/居住成本、财政/预算压力、水电污水雨洪、公共安全/消防警务医疗、商品物流/供应链或宜居/环境中的哪一类，并给出短行动建议。它不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `ROAD_HIERARCHY_ADVISOR` 应只在道路层级压力偏高或有风险时，在现有目标或警报文案附近显示 `RoadHierarchyPressure`、`RoadHierarchyFocus`、`RoadHierarchyDriver` 和 `RoadHierarchyAction`；文案应说明当前最该处理的是主干道不足、断头路、路网连通不足、路口延误、道路瓶颈、拥堵、公交候车/运力、停车压力、事故/养护中的哪一类，并给出短行动建议。它不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `COMMUTE_CORRIDOR_ADVISOR` 应在现有目标或警报文案附近显示通勤走廊压力、焦点、驱动原因和短行动建议；文案应能说明当前移动问题来自住岗平衡、通勤效率、汽车依赖、公交通勤、停车搜索、路网连通、货运满载或外部连接中的哪一类，并显示为“通勤:压 ... -> ...”类短句。它只作为 `ObjectiveInsightParts` 候选进入右侧优先栈，不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `CITY_EVENT_DIGEST` 应在现有目标或警报文案附近显示近期 `RecentEvents` / `EventDigest` 摘要；文案应短到可读，不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `DEMAND_DRIVER_ANALYSIS` 应在现有目标/警报/需求文案附近显示最高需求、驱动原因和建议行动；它不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `SERVICE_GAP_ADVISOR` 应在现有目标或警报文案附近显示服务短板、原因和短行动建议；文案应能说明当前短板来自诊所/学校/消防/警务/公园覆盖，或教育、健康、安全、火灾风险中的哪一类。它只作为 `ObjectiveInsightParts` 候选进入右侧优先栈，不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `GROWTH_BOTTLENECK_ADVISOR` 应在现有目标或警报文案附近显示增长瓶颈、原因和短行动建议；文案应能说明当前瓶颈来自住房、财政、通勤、服务、公用设施、就业、供应链或宜居问题中的哪一类。它只作为 `ObjectiveInsightParts` 候选进入右侧优先栈，不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `BUILDING_UPGRADE_READINESS_ADVISOR` 应在现有目标或警报文案附近显示建筑升级准备度、候选数、阻塞数、原因和短行动建议；人工预览时确认右侧目标提示可出现“升级:候/阻 ... -> ...”类短句，并能说明住宅/商业/办公/工业的主要机会或阻塞来自年龄门槛、升级分、地价、公交、接路、服务覆盖、物流、教育/高教、劳动力、污染或噪音中的哪一类。它只作为 `ObjectiveInsightParts` 候选进入右侧优先栈，不应新增独立按钮、弹窗、工具项或底部状态格，也不应挤压 33 项状态网格。
+- `HOUSING_AFFORDABILITY_ADVISOR` 应在现有目标或警报文案附近显示住房负担/宜居迁入焦点、原因和短行动建议；人工预览时确认右侧目标提示可出现“住房:压 ... -> ...”类短句，并能说明当前压力来自租金压力、住宅容量/人口缺口、住宅分区或混合/高密供给、平均地价/税率、公交覆盖、服务公平、宜居/生活压力、住岗平衡或保障住房政策中的哪一类。它只作为 `ObjectiveInsightParts` 候选进入右侧优先栈，不应新增独立按钮、弹窗、工具项、底部状态格、建筑数量、workers、TS/Vite、WebGL2 或 SharedArrayBuffer，也不应挤压 33 项状态网格。
+- `ECONOMIC_SPECIALIZATION_ADVISOR` 应在现有目标或警报文案附近显示经济专精焦点、原因和短行动建议；人工预览时确认右侧目标提示可出现“经济:专... -> ...”类短句，并能说明当前最适合推进资源工业、物流供应链、办公创新、旅游会展或混合商业中的哪一条经济线。它只作为 `ObjectiveInsightParts` 候选进入右侧优先栈，不应新增独立按钮、弹窗、工具项、底部状态格、建筑数量、workers、TS/Vite、WebGL2 或 SharedArrayBuffer，也不应挤压 33 项状态网格。
+- `HUD_INSIGHT_PRIORITY_STACK` / `ObjectiveInsightParts` 应在右侧目标/警报文案区域表现为限量展示栈：原 `ObjectiveHint` 始终排在第一位，风险预测、预算拆解、片区优先级、道路层级、通勤走廊、服务短板、成长瓶颈、建筑升级准备度、住房负担、经济专精、需求驱动和城市事件只作为候选进入少量最高优先级 insight；同一帧候选过多时应按风险/压力/事件重要性压缩，而不是增加按钮、弹窗、工具项或底部状态格。
+- 底部状态区应为两行网格；33 个状态项应完整显示，并预留 33 格容量，不应与右侧检查器或左侧图层按钮重叠，其中“宜居”项应显示宜居度/生活压力，“运维”项应显示服务不足人口与主要服务缺口来源，“通信”项应显示通信覆盖/满载和邮政覆盖/满载，“灾备”项应显示灾备百分比和灾害风险。
+- 地图道路、住宅、商业、混合用地、办公、工业、服务和基础设施建筑应使用不同材质颜色。
+- 点击图层按钮时 overlay 颜色应切换。
+- 当前图层应显示 `TILE_INSPECTOR_OVERLAY_LEGEND` 图例；玩家悬停或点击任一地块时，右侧检查器应显示分区、建筑/道路、当前图层数值和诊断摘要。该交互不应新增建筑、按钮、政策或 worker，不应修改 `miniprogram/game.json`，也不应挤压底部 33 项状态网格。
+- 点击“公交”图层时，公交站周边应显示蓝绿热力覆盖。
+- 点击“通信”图层时，通信枢纽周边应显示蓝绿通信覆盖热力。
+- 点击“路安”图层时，道路养护站周边应显示由红/橙到绿色的养护覆盖热力。
+- 点击“回收”图层时，回收处理站和垃圾发电厂周边应显示回收覆盖热力。
+- 顶栏日期、人口、现金、净收入、财政信用、行政效率、债务压力、债券本金、幸福度和评分应持续刷新；赤字、债务压力、行政效率不足或现金缓冲不足时对应项应高亮。
+- 选择铺路工具时自动切到交通图层，选择分区工具时自动切到分区图层。
+- 右侧工具面板应覆盖铺路、道路升级、七类分区、三十八类建筑和拆除。
+- 右侧工具面板和底部两行状态网格之间应保留间距；工具按钮不应被底部状态栏遮挡。
+- 右侧控制按钮应覆盖暂停、倍速、税率、预算、债券、保存、读取和九项城市政策。
+- 右侧预览区域应同时承接建造/分区/拆除反馈和政策效果反馈；政策效果反馈出现时不应挤压三十八类建筑按钮，也不应遮挡底部两行 33 项状态网格。
+- 建造失败时右侧预览应显示失败原因；成功建造后地图应刷新。
+- 选择任一建筑并悬停或点击可建/不可建地块时，右侧建造预览应显示“选址诊断”，包含 1-2 行中文 `SiteDiagnosis` 建议和可理解的 `BuildingSiteScore` 倾向；诊断不应新增按钮、不应挤压三十八类建筑按钮，也不应增加底部状态格。
+- 鼠标右键/中键拖拽应平移相机，滚轮应缩放；触屏双指缩放不应误触建造。
+
+## 玩法校验
+- 铺路会扣现金并增加道路容量、道路维护费；连续路网、交叉口、断头路和建筑接路率应改变路网连通性。
+- 道路升级工具应能把普通路升级为主干道；主干道应提高道路容量、道路维护费，并在地图中显示为更宽/更高的路块。
+- 分区会扣现金，并在图层中显示类型。
+- 高需求、接路且适宜度达标的住宅/商业/混合用地/办公/工业分区应能在日期推进后自动长出对应建筑；自动建筑应保存/读取后仍存在。
+- 拖拽住宅/商业/混合用地/办公/工业分区时，右侧预览应显示适宜度百分比。
+- 拖拽住宅/商业/混合用地/办公/工业分区时，右侧预览应显示缓冲风险；工业/基础设施贴近住宅或混合用地时风险应升高，公共服务区相邻应降低冲突。
+- 人口达到 180 且用地冲突高于 35 时应触发“用地冲突偏高”；人口达到 160 且冲突控制在 18 以下时应完成“功能缓冲”目标。
+- 低服务、断路或污染噪声较高的开发片区应降低发展品质；人口达到 180 后品质低于 45 应触发“片区品质偏低”，品质达到 68 应完成“优质片区”目标。
+- HUD 底部状态应显示用地效率、空置分区和用地冲突；分区被自然开发后用地效率应上升，过量空置分区应触发“空置分区过多”告警，用地冲突偏高时该状态应高亮。
+- 居住成本高、住宅需求高且公寓楼已解锁时，2x3 住宅分区应能自然开发公寓楼；缺少合适地块时应触发高密住宅地块告警。
+- 建造会校验现金、地形、占地、道路和分区匹配。
+- 建造预览的选址诊断应按建筑类型引用正确因素：住宅/公寓关注服务、公园、公交、地价和污染噪声；商业/混合关注地价、公交、停车、服务和客流；办公/研发关注教育/高等教育、通信、公交、治安和水电；工业/资源/物流关注工业分区、货运、丘陵/资源潜力、低敏感邻接和废弃物可达；公共服务、邮政、停车、雨洪、水电/污水/回收设施关注覆盖缺口、容量、道路接入和环境代价。
+- 对道路未接入、分区不匹配、污染/噪声冲突、物流/通信/邮政/停车/雨洪/服务覆盖不足或推荐分区适宜度偏低的地块，`SiteDiagnosis` 应说明主要短板；对条件良好的地块，应说明最主要优势，而不是只显示通用成功文案。
+- 公寓楼应只允许建在住宅区，达到解锁条件后可作为高容量住宅降低住房紧张，但会增加水电和交通压力。
+- 混合街区应只允许建在混合区，同时提供住房和岗位，并提高“混合核心”里程碑进度。
+- 共享办公楼应只允许建在办公区，达到解锁条件后提供办公岗位，并提高“知识经济”里程碑进度。
+- 研发园区应只允许建在办公区，达到解锁条件后提供办公岗位和创新能力，并提高“创新高地”里程碑进度。
+- 城市广场应只允许建在公共服务区，接入道路后提高公园覆盖、城市吸引力和“城市吸引力”里程碑进度。
+- 会展中心应只允许建在公共服务区，接入道路后提高城市吸引力、游客、旅游收入和“会展客流”里程碑进度。
+- 市政厅应只允许建在公共服务区，接入道路后提高行政效率、税收质量和“市政中心”里程碑进度；人口达到 300 后行政效率不足应触发告警。
+- HUD 底部状态应显示城市吸引力、游客数量、旅游收入和外部连接；游客旅游收入与会展中心地标收益应进入月度预算和净收支。
+- HUD 底部状态应显示商品平衡、资源适配、本地供给、铁路导入和供应链稳定；工业岗位、资源加工园、货运铁路站、外部连接、配送中心仓储缓冲、货运可靠性和资源适配应提高可用商品供给，商业、居民和游客应提高商品需求。
+- 商品短缺应压低商业需求、幸福度和城市评分，并推高工业需求；商品平衡良好应提供少量税收和市场成长收益；建成资源加工园且商品平衡达标后应完成“本地供给”里程碑，资源加工园获得足够丘陵/工业地块/货运可达性并形成 `IndustrialSpecialization` 后应完成 `specialized_industry`（产业专精）里程碑，建成配送中心且供应链稳定达标后应完成“供应链缓冲”里程碑，建成货运铁路站且铁路导入达标后应完成“铁路货运”里程碑。
+- HUD 底部状态应显示劳动力素质、高等教育覆盖、创新能力、生产率奖金和用工缺口；高教育覆盖、高等教育覆盖、研发能力、办公岗位和升级建筑应提高劳动力素质。
+- 岗位数超过可就业人口时应提高用工缺口；用工缺口应压低幸福度、城市评分和商业/办公/工业/混合需求，并轻微提高住宅需求。
+- HUD 底部状态应显示路网连通性、断头路数量、道路瓶颈和路口延误；路网连通性偏低应压低通勤效率和城市评分，并触发路网告警。复杂交叉口、断头路和拥堵应推高 `IntersectionDelay` / `RoadBottleneckPressure`，主干道骨架、信号优化和拥堵收费应降低延误或瓶颈；瓶颈高于阈值时应触发“道路瓶颈偏高”或“路口延误偏高”，达标后完成 `traffic_flow`。
+- HUD 底部状态应显示步行可达性；连通路网、公交、服务、公园、紧凑用地和混合街区应提高步行可达性，汽车依赖和拥堵应压低步行可达性。
+- HUD 底部状态应显示通勤效率、汽车依赖、停车压力和停车满载率；公交覆盖、公交可靠性、低候车压力、外部连接、路网连通性、住岗平衡、混合街区和主干道应提高通勤效率。
+- HUD 底部状态应显示道路安全、事故风险和道路养护覆盖；道路养护站、连通路网、应急响应和步行可达性应提高安全，拥堵、断头路和复杂交叉口应推高风险。
+- 高汽车依赖、拥堵和商业/办公岗位增加时停车压力应上升；公交覆盖、路网连通、混合街区、紧凑用地和邻里停车楼提高后停车压力应下降。
+- 停车压力高于 45 时应增加道路找车位绕行负载；压力高于 50 时应压低幸福度、城市吸引力和商业/办公/混合需求。
+- 会展中心建成并产生游客后，应额外增加停车压力；公交覆盖不足且停车压力过高时应触发“会展交通承压”告警。
+- 邻里停车楼接入道路后应提高停车覆盖率和停车容量；覆盖内建筑应减少部分出行压力，停车图层应显示覆盖热力。
+- 雨水花园接入道路后应提高雨洪容量和雨洪覆盖；雨洪图层应显示覆盖热力，水电状态应显示内涝风险。
+- 完整街道启用后应降低接路建筑交通、汽车依赖、停车压力、雨洪负荷、噪声和事故风险，提高步行可达性与道路安全；如果拥堵和汽车依赖仍高，应触发完整街道拥堵告警。
+- 信号优化启用后应按交叉口数量和路网连通性降低拥堵与路口延误，减少事故风险、提高道路安全；如果交叉口密集且拥堵仍高，应触发信号优化过载告警。
+- 拥堵收费启用后应降低拥堵、汽车依赖和停车压力，并在道路和人口规模达标后形成政策收入；如果公交覆盖不足且汽车依赖仍高，应触发拥堵收费阻力告警。
+- 停车收费启用后应在人口 >= 140 且道路 >= 8 时形成停车收费收入；公交覆盖、路网和停车覆盖足够时应轻微降低汽车依赖和停车压力；公交替代不足且停车压力仍高时应触发“停车收费阻力”告警。
+- HUD 底部状态应显示环境质量和噪声压力；公园、回收、公交、绿色规范、完整街道和雨洪韧性应提高环境质量或降低噪声压力。
+- 工业污染、道路/建筑噪声、拥堵和汽车依赖应降低环境质量或提高噪声压力。
+- HUD 底部状态应显示公共健康和健康风险；医疗覆盖、医疗响应、灾备、环境质量、回收覆盖、污水处理、水电可靠性和雨洪韧性应提高公共健康，病患积压应提高健康风险。
+- HUD 底部状态应显示宜居度和生活压力；服务公平、公园、教育、生命关怀、公交、通勤、步行、环境、公共健康和水电可靠性应提高宜居度，居住成本、治安、健康风险、噪声、道路瓶颈、候车压力和服务不均应提高生活压力。人口达到 160 且宜居度低于 45 时应触发“宜居度偏低”，人口达到 220 且生活压力高于 60 时应触发“生活压力偏高”；人口 250 后宜居度达到 65 且生活压力不高于 35 时应完成 `livable_district`。
+- HUD 底部状态应显示水电可靠性、满载率、污水满载率和内涝风险；电站/太阳能阵列/水塔扩建应提高水电可靠性并降低满载率，太阳能阵列不应增加污染，污水处理站扩建应提高污水可靠性并降低污水满载率，雨水花园应提高雨洪韧性并降低内涝风险。
+- 污染、噪声压力、水电短缺、污水过载和内涝风险应提高健康风险；健康风险应压低迁入速度、幸福度、城市评分和宜居类需求。
+- 拆除会返还部分现金并移除建筑效果。
+- 水电不足会降低效率并产生警报；人口达到 180 且水电满载率超过 115% 时应触发水电负荷过高告警；人口达到 320 且水电满载率超过 95% 又没有太阳能阵列时应触发缺少清洁电力告警，建成太阳能阵列且水电可靠性达到 95% 时应完成“清洁电力”里程碑。
+- 人口达到 180 且污水满载率超过 115% 时应触发污水处理过载告警；人口达到 180 且污水可靠性低于 65 时应触发水环境风险偏高告警。
+- 人口达到 180 且雨洪满载率超过 115% 时应触发雨洪容量不足告警；人口达到 220 且内涝风险高于 55 时应触发内涝风险偏高告警；雨洪韧性达到 75 且内涝风险不高于 32 时应完成“雨洪韧性”目标。
+- 公园覆盖、医疗覆盖、教育覆盖、消防覆盖、警务覆盖、拥堵、污染、地价、就业会影响幸福度和需求。
+- 居住成本应随住房紧张、地价和高税率上升，并能被服务、公交和住宅余量缓解；人口达到 160 且压力过高时应触发居住成本告警。
+- 口袋公园接入道路后应提高公园覆盖；社区诊所和区域医院接入道路后应提高医疗覆盖与医疗容量，且区域医院应提供更大半径和服务容量；应急避难中心接入道路后应提高灾备并进入 Services overlay；社区学校和社区学院接入道路后应提高教育覆盖与教育容量，社区学院还应提高高等教育覆盖；社区消防站接入道路后应提高消防覆盖；“服务”图层应显示公园、医疗、避难、教育、消防和警务热力。
+- 消防韧性中，社区消防站应写入 `FireProtectionAccess`，并按建筑火灾负荷形成 `FireLoad`、`FireCapacity`、`FireUtilization`、`FireProtection`、`FireRisk` 和 `FireResponse`；工业、污染、噪声、高岗位、覆盖缺口、容量不足、拥堵和断头路应推高火灾风险或降低响应。
+- HUD 底部状态应显示运维状态和服务利用率；现金缓冲、服务预算、低过载、低水电满载和低拥堵应提高维护状态。
+- 医疗、教育、消防、警务、应急避难和生命关怀服务负载超过容量时，HUD “运维”项应显示较高服务利用率，分类覆盖应下降，并触发公共服务容量不足告警；专项医疗负载超过容量时还应触发医疗容量/响应/病患积压类告警，专项教育负载超过容量时还应触发教育容量/入学积压/学习通道类告警，专项警务负载超过容量时还应触发警务容量/响应/案件积压类告警。
+- HUD “运维”项应显示服务公平、服务不足人口和主要服务缺口来源；住宅片区缺少公园、医疗、教育、公交、消防、警务、回收、通信、邮政或生命关怀可达性时服务公平应下降，补齐服务后应上升。
+- 服务缺口来源应从住宅敏感建筑的公园/医疗/教育/公交/消防/警务/回收/通信/邮政/生命关怀覆盖缺失按容量加权估算；当高容量住宅主要缺少通信或邮政时，HUD 的主要缺口来源不应只显示公园、医疗或教育等通用项。
+- 人口达到 180 且服务公平低于 45 时应触发“片区服务不均”告警；人口达到 200 且服务公平达到 65 时应完成“均衡服务”目标。
+- HUD 底部状态应显示应急响应和灾备/灾害风险；医疗覆盖、医疗响应、消防/警务覆盖、服务可靠性和路网连通性应提高响应，应急避难中心应结合响应、雨洪、水电、路网和维护状态提高 `DisasterPreparedness`、降低 `DisasterRisk`，拥堵、断头路、服务过载和未接路建筑应压低响应。
+- 人口达到 240 且城市吸引力低于 35 时应触发城市吸引力偏低告警。
+- 人口达到 260 且劳动力素质低于 35 时应触发劳动力素质偏低告警。
+- 人口达到 360 且高等教育覆盖低于 30% 时应触发高等教育不足告警。
+- 人口达到 260 后教育容量不足、人口达到 320 后入学积压偏高、人口达到 360 后学习通道偏弱时，应分别触发“教育容量不足”“入学积压偏高”“学习通道偏弱”。
+- 人口达到 150 且用工缺口高于 45 时应触发用工缺口偏高告警。
+- 人口达到 180 且通勤效率低于 40 时应触发通勤效率偏低告警。
+- 人口达到 180 且步行可达性低于 42% 时应触发步行可达性偏低告警。
+- 人口达到 220 且汽车依赖高于 72 时应触发汽车依赖偏高告警。
+- 人口达到 220 且停车压力高于 60 时应触发停车压力偏高告警；人口达到 180 且停车覆盖不足或停车满载率超过 115% 时应触发停车设施告警；人口达到 220 且汽车依赖不高于 55、停车压力不高于 38 时应完成“低车依赖”目标；停车覆盖达到 45% 且利用率不高于 100% 时应完成“停车调度”目标；启用停车收费、停车压力不高于 50 且公交覆盖达到 35% 时应完成“停车收费”目标。
+- 人口达到 620、吸引力低于 45 且没有会展中心时应触发“缺少会展地标”告警；建成会展中心且游客达到 80 时应完成“会展客流”目标。
+- 人口达到 160 且环境质量低于 42 时应触发环境质量偏低告警。
+- 人口达到 180 且噪声压力高于 55 时应触发噪声压力偏高告警。
+- 人口达到 180 且健康风险高于 55 时应触发公共健康风险偏高告警。
+- 人口达到 220 且公共健康低于 40 时应触发公共健康偏低告警。
+- 医疗容量不足、医疗响应偏低或病患积压偏高时，HUD 应显示医疗满载/响应/积压压力，并触发“医疗容量不足”“医疗响应偏低”“病患积压偏高”；医疗容量、响应和积压达标后应完成 `healthcare_capacity` 目标。
+- 学校和社区学院接入道路后应提高 `EducationCapacity` 和 `LearningPipeline`，降低 `EducationUtilization` 与 `StudentBacklog`；教育容量不足、入学积压偏高或学习通道偏弱时，HUD 教育项应显示学位负载/容量/满载、积压和学习通道，并触发“教育容量不足”“入学积压偏高”“学习通道偏弱”；教育覆盖、容量、积压和学习通道达标后应完成 `education_capacity` 目标。
+- 社区警务站接入道路后应提高警务覆盖；`police_precinct` 警署接入道路后应提高 `SecurityCapacity` 与 `PoliceResponse`，降低 `SecurityUtilization` 与 `CaseBacklog`；犯罪压力应随失业、居住成本、拥堵、警务不足、响应偏低和案件积压上升，并在压力过高时触发治安告警。
+- 公交站接入道路后应提高公交覆盖率、公交容量和公交可靠性；覆盖内建筑应降低道路负载并改善拥堵、幸福度和商业/混合用地/办公/工业需求。本轮不应新增客运建筑类型。
+- 轨道交通站解锁后应作为更高成本、更高维护的中后期公交设施；接入道路后应显著提高公交覆盖半径、公交容量和 `TransitReliability`，过载缓解后可完成“轨道骨架”和 `transit_reliability` 里程碑。
+- 城际枢纽解锁后应作为后期公交/外部连接设施；接入道路后应提高外部连接、游客、旅游收入、通勤效率、公交可靠性和“区域门户”里程碑进度。
+- 覆盖内乘客负载超过公交容量时，HUD 公交项应显示较高满载率、较低可靠性和较高候车压力，有效公交覆盖应下降，拥堵、“公交运力不足”“公交可靠性偏低”和“公交候车压力偏高”告警应上升。
+- 货运站接入道路后应提高货运覆盖率和货运容量；覆盖内商业/工业建筑应降低道路负载，并改善工业需求、税收质量和商业/工业建筑成长；资源加工园应使用货运图层，并在丘陵、工业地块和货运可达时提高 `ResourcePotential`，再按水电和人才形成 `ResourceSpecialization`、本地供给与 `IndustrialSpecialization`。
+- 配送中心解锁并接入道路后应进入物流图层，形成仓储缓冲并提高供应链稳定；商品 HUD 应显示“仓”稳定值，商品短缺时可用商品供给应获得缓冲补足。
+- 货运铁路站解锁并接入道路后应进入物流图层，提供更高货运容量和铁路导入，不应提高客运外部连接；商品 HUD 应显示“铁”导入值。
+- 覆盖内商业/工业货流负载超过货运容量时，HUD 货运项应显示较高满载率，有效货运覆盖应下降，拥堵和“货运运力不足”告警应上升；建成资源加工园但丘陵/工业地块/货运可达性不足时应触发“本地资源适配不足”或“资源物流不足”，建成配送中心但仓储调度受阻时应触发“仓储调度受阻”，建成货运铁路站但铁路导入受阻时应触发“铁路货运受阻”。
+- 通信枢纽接入道路后应提高通信覆盖率和通信容量；覆盖内住宅、商业、办公、混合用地和工业活动应略微降低道路负载，并改善企业效率、商业/办公需求、生产率奖金和税收质量。研发园区建成后，通信、高等教育和水电可靠性不足应限制创新能力。
+- 覆盖内通信负载超过通信容量时，HUD 通信项应显示较高满载率，有效通信覆盖应下降，并推动“通信容量不足”告警。
+- `post_office` 邮政局接入道路后应使用服务图层预览，并通过 `ApplyMailTileAccess` 写入 `MailAccess`；覆盖内住宅、商业、办公、混合用地、工业和地标建筑应进入 `MailWeightForBuilding` 权重，推动 `MailCoverage`、`MailLoad`、`MailCapacity`、`MailUtilization` 和 `MailReliability` 重算。
+- 覆盖内邮件负载超过邮政容量时，HUD 通信项应显示较高邮政满载率，有效邮政覆盖应按 `MailReliability` 下降，并触发“邮政容量不足”或“邮件配送受阻”；邮政覆盖达到 55% 且利用率不高于 100% 时应完成 `mail_service` 目标。
+- `memorial_garden` 纪念花园接入道路后应使用服务图层预览，并通过 `ApplyDeathcareTileAccess` 写入 `DeathcareAccess`；覆盖内生命关怀敏感建筑应进入 `DeathcareWeightForBuilding` 权重，推动 `DeathcareCoverage`、`DeathcareLoad`、`DeathcareCapacity`、`DeathcareUtilization` 和 `MortalityPressure` 重算。
+- 生命关怀覆盖或容量不足时，HUD 应显示较高死亡压力或生命关怀满载率，并触发“缺少生命关怀”“生命关怀容量不足”“死亡压力偏高”；生命关怀覆盖、容量利用率和死亡压力达标后应完成 `deathcare_ready` 目标。
+- `police_precinct` 警署接入道路后应使用服务图层预览，并通过警务容量口径进入 `SecurityCapacityForBuildings`；覆盖内治安负载应进入 `SecurityLoad`，推动 `SecurityUtilization`、`PoliceResponse` 和 `CaseBacklog` 重算。
+- 警务容量不足、响应偏低或案件积压偏高时，HUD 应显示警务容量/响应压力，并触发“警务容量不足”“警务响应偏低”“案件积压偏高”；警务容量、响应和案件积压达标后应完成 `police_readiness` 目标。
+- 道路养护站接入道路后应提高道路养护覆盖；覆盖不足或事故风险偏高时应影响 HUD 路安项、维护状态、幸福度、城市评分和需求。
+- 事故风险高于阈值时应增加额外道路负载，随后拥堵、通勤效率、停车压力和道路安全应重新计算。
+- 回收处理站接入道路后应提高回收覆盖率和回收容量；垃圾负荷超过容量时 HUD 回收项应显示较高满载率，有效覆盖下降，污染、设施需求和幸福度压力应上升。
+- 垃圾发电厂接入道路后应同时提高回收容量和供电，并增加污染、噪声、用水、维护费和交通压力；达成条件后应完成“资源回收能源”里程碑。
+- 住宅、商业、混合用地、办公和工业建筑达到足够年龄、地价、公交可达性、接路和发展品质条件后应自动升级；办公楼还应受教育、人才和治安改善推动。升级后建筑高度应增加，并提高容量/岗位/税值与维护。
+- 每 30 天预算会结算到现金，生产率奖金和旅游收入应进入税收侧。
+- 债券按钮应立即增加现金并增加债券本金；每 30 天债务服务费应进入月净收支并降低债券本金，债券本金应随保存/读取恢复。
+- 里程碑会随路网、人口、服务、灾备和财政状态更新。
+- 当前未完成里程碑变化后，`OBJECTIVE_ACTION_ADVICE` 应随目标重新生成：均衡服务应优先提示主要服务缺口来源，交通类目标应提示打通断头路、升级主干道或补公交，财政类目标应提示控预算、扩税基或处理债务，医疗/教育/警务/消防等专项目标应提示补容量、覆盖或响应。
+- `RISK_FORECAST_ADVISOR` 应随现金续航、月净收支、债务压力、水电/污水/雨洪过载、公共服务容量、交通瓶颈和高优先级告警变化重新生成风险焦点与行动建议；`CashRunwayDays` 应能体现当前现金可支撑的天数趋势，且不改变底部 33 项状态数量。
+- `BUDGET_BREAKDOWN_ADVISOR` 应随现金/赤字、债务压力、政策执行成本、建筑维护费、公共服务容量、水电/污水/雨洪满载、公交/货运/通信/邮政容量、道路维护、停车和回收压力变化重新生成 `BudgetFocus` 与 `BudgetDriver`；`BudgetAction` 应是一句可执行的财政短建议，例如控服务预算、扩税基、补容量、压债务或优先处理高维护设施，且不改变底部 33 项状态数量。
+- `DISTRICT_PRIORITY_ADVISOR` 应随交通瓶颈、服务公平/服务不足人口、住房/居住成本、财政/预算压力、水电/污水/雨洪容量、消防/警务/医疗/灾害风险、商品物流/供应链、宜居/环境压力变化重新生成 `DistrictPriorityScore`、`DistrictPriorityFocus` 与 `DistrictPriorityDriver`；`DistrictPriorityAction` 应是一句可执行的治理短建议，例如优先疏通主干、补主要服务缺口、稳财政、扩水电污水雨洪容量、补消防警务医疗、补物流仓储或治理环境压力，且不改变底部 33 项状态数量。
+- `ROAD_HIERARCHY_ADVISOR` 应随主干道数量/占比、断头路、路网连通性、`IntersectionDelay`、`RoadBottleneckPressure`、拥堵、`TransitReliability`、`TransitWaitPressure`、停车压力、事故风险和道路养护覆盖变化重新生成 `RoadHierarchyPressure`、`RoadHierarchyFocus` 与 `RoadHierarchyDriver`；`RoadHierarchyAction` 应是一句可执行的交通短建议，例如升级主干、打通断头路、补交叉连接、优化信号、补公交运力、补停车或补道路养护，且不改变底部 33 项状态数量。
+- `COMMUTE_CORRIDOR_ADVISOR` 应随住岗平衡、`CommuteEfficiency`、`CarDependency`、公交覆盖/满载/可靠性/候车压力、停车压力/覆盖/满载、路网连通、道路瓶颈、路口延误、货运覆盖/满载、供应链稳定和外部连接变化重新生成 `CommuteCorridorScore`、`CommuteCorridorFocus`、`CommuteCorridorDriver` 与 `CommuteCorridorAction`；短建议应优先指向补公交/轨道、混合用地、打通支路、停车换乘、货运容量或外部连接，并保持底部 33 项状态数量不变。
+- `CITY_EVENT_DIGEST` 应随建造、政策切换、存读档和关键系统事件刷新 `RecentEvents` / `EventDigest`；摘要只用于现有 HUD 文案区域，不改变底部 33 项状态数量。
+- `DEMAND_DRIVER_ANALYSIS` 应随住宅、商业、混合、办公、工业、服务和设施需求变化重新选择 `DemandFocus`，并让 `DemandDriver` / `DemandAction` 反映居住成本、商品供给、通勤、人才、物流、服务缺口或基础设施容量等主要短板；不改变底部 33 项状态数量。
+- `SERVICE_GAP_ADVISOR` 应随 clinic/school/fire/police/park 覆盖，以及 education、health、safety、fire risk 指标变化重新生成 `ServiceGapAdvisorFocus`、`ServiceGapAdvisorDriver` 与 `ServiceGapAdvisorAction`；短建议应优先指向补诊所/医院、学校/学院、消防、警务、公园或安全短板，并保持底部 33 项状态数量不变。
+- `GROWTH_BOTTLENECK_ADVISOR` 应随住房容量、财政续航、道路层级、服务短板、公用设施可靠性、就业/人才、供应链和宜居条件变化重新生成 `GrowthBottleneckScore`、`GrowthBottleneckFocus`、`GrowthBottleneckDriver` 与 `GrowthBottleneckAction`；短建议应优先指向当前最卡增长的系统，并保持底部 33 项状态数量不变。
+- `BUILDING_UPGRADE_READINESS_ADVISOR` 应随住宅/商业/办公/工业建筑年龄、升级分、地价、公交、接路、服务覆盖、物流、教育/高教、劳动力、污染和噪音变化重新生成 `BuildingUpgradeReadinessScore`、`BuildingUpgradeReadyCount`、`BuildingUpgradeBlockedCount`、`BuildingUpgradeReadinessFocus`、`BuildingUpgradeReadinessDriver` 与 `BuildingUpgradeReadinessAction`；短建议应优先指向当前最影响升级的条件，并保持建筑数量、工具按钮和底部 33 项状态数量不变。
+- `HOUSING_AFFORDABILITY_ADVISOR` 应随 `RentPressure`、住房容量/人口缺口、`ResidentialZoneTiles`、`MixedUse`、`HighDensityResidentialBuildings`、`AverageLandValue`、`TaxLevel`、`TransitCoverage`、`ServiceEquity`、`LivingCondition`、`LivingPressure`、`JobsHousingBalance` 和 `AffordableHousing` 政策状态变化重新生成 `HousingAffordabilityScore`、`HousingAffordabilityFocus`、`HousingAffordabilityDriver` 与 `HousingAffordabilityAction`；短建议应优先指向补住宅/公寓/混合用地、降低税率或启用保障住房、补公交、补主要服务缺口、改善宜居压力或修正住岗错配，并保持建筑数量、工具按钮和底部 33 项状态数量不变。
+- `ECONOMIC_SPECIALIZATION_ADVISOR` 应随 `BusinessEfficiency`、`InnovationCapacity`、`OfficeJobs`、`WorkforceSkill`、`AdvancedEducationCoverage`、`IndustrialSpecialization`、`ResourceSpecialization`、`LocalGoodsSupply`、`GoodsBalance`、`SupplyChainStability`、`LogisticsCoverage`、`LogisticsUtilization`、`Attractiveness`、`Visitors`、`TourismIncome`、`MixedUseBuildings` 和 `RegionalConnectivity` 变化重新生成 `EconomicSpecializationScore`、`EconomicSpecializationFocus`、`EconomicSpecializationDriver` 与 `EconomicSpecializationAction`；短建议应优先指向补资源工业、物流供应链、办公创新、旅游会展或混合商业的既有建筑/分区/服务条件，并保持建筑数量、工具按钮和底部 33 项状态数量不变。
+- `HUD_INSIGHT_PRIORITY_STACK` / `ObjectiveInsightParts` 应在玩法信息层保持目标优先级清晰：`ObjectiveHint` 不应被风险、预算、片区、道路、通勤走廊、服务短板、成长瓶颈、建筑升级准备度、住房负担、经济专精、需求或事件 insight 覆盖；当现金/基础设施/服务/交通/住房/经济专精风险、服务短板、成长瓶颈与近期事件同时出现时，应按风险、压力和事件重要性挑选少量最高优先级条目，并保持底部 33 项状态数量不变。
+- 绿色规范应降低污染/噪声并增加政策支出；公交优先应提高道路容量、降低交通压力并增加道路/政策支出；增长补贴应提高人口增长和需求并增加政策支出；保障住房应降低居住成本、提高住宅需求/迁入稳定性并增加政策支出；交通安全行动应降低事故风险、提高道路安全并增加政策支出；完整街道应略降道路容量、增加维护/政策支出、降低汽车依赖/停车压力/雨洪负荷/事故风险并提高步行可达性；信号优化应降低交叉口拥堵/事故风险、提高道路安全并增加政策支出；拥堵收费应降低拥堵/汽车依赖/停车压力并形成政策收入，但在公交不足时产生阻力告警；停车收费应在人口与道路规模达标后形成停车收费收入，在公交覆盖、路网和停车覆盖足够时轻微降低汽车依赖/停车压力，并在公交替代不足且停车压力仍高时产生阻力告警；行政效率提高后正向政策执行成本应下降。
+- 低税率应降低税收但提高幸福度和住宅/商业/混合用地/办公/工业需求；高税率应提高税收但压低幸福度和住宅/商业/混合用地/办公/工业需求，幸福度低于 60 时触发税率压力偏高告警。
+- 紧缩服务预算应降低公共服务/基础设施维护费，但压低服务、公交、城际连接、货运、通信、邮政、道路养护、停车、雨洪、回收、垃圾发电、污水和水电输出；加码服务预算应提高这些输出和维护费，赤字时触发服务预算告警。
+- 月净收支为负、现金低于单月市政支出、现金为负或债券本金较高时，债务压力应上升并压低财政信用；行政效率提高后财政信用和税收质量应改善；财政信用偏低、债务压力偏高和债务服务过高应触发对应告警。
+- 人口达到 180 且公交覆盖低于 25% 时应触发公共交通覆盖不足告警；人口达到 220 且公交满载率超过 115% 时应触发公交运力不足告警；人口达到 240、公交覆盖不低但 `TransitReliability` 低于 60 时应触发“公交可靠性偏低”；人口达到 260 且 `TransitWaitPressure` 高于 55 时应触发“公交候车压力偏高”；公交覆盖达到 45%、可靠性达到 70 且候车压力不高于 35 时应完成 `transit_reliability`；人口达到 520 且公交满载率超过 105% 且没有轨道交通站时应触发缺少轨道交通告警；人口达到 680 且外部连接低于 35 时应触发外部连接不足告警。
+- 就业岗位达到 120 且货运覆盖低于 25% 时应触发货运覆盖不足告警；就业岗位达到 180 且货运满载率超过 115% 时应触发货运运力不足告警；人口达到 260、商品平衡偏低且未建资源加工园时应触发“缺少本地资源”；人口达到 260、已建资源加工园但资源适配或产业专精不足时应触发“本地资源适配不足”；人口达到 420、商品平衡偏低且未建配送中心时应触发“缺少配送中心”；人口达到 760、商品平衡偏低且未建货运铁路站时应触发“缺少货运铁路”。
+- 人口达到 180 且通信覆盖低于 35% 时应触发通信覆盖不足告警；人口达到 260 且通信满载率超过 115% 时应触发通信容量不足告警；就业达到 180 且企业效率低于 45 时应触发企业效率偏低告警。
+- 人口达到 240 且邮政覆盖低于 35% 时应触发“缺少邮政服务”；人口达到 360 且邮政满载率超过 115% 时应触发“邮政容量不足”；就业达到 220 且 `MailReliability` 低于 55 时应触发“邮件配送受阻”。
+- 人口达到 520、办公岗位达到 90、创新能力低于 35 且没有研发园区时应触发“缺少研发园区”告警；研发园区建成但高教或通信不足时应触发“研发配套不足”告警；建成研发园区且创新能力达到 65 时应完成“创新高地”目标。
+- 已有道路不少于 18 格且道路养护覆盖低于 35% 时应触发道路养护不足告警；人口达到 180 且事故风险高于 55 时应触发道路事故风险偏高告警；已有道路不少于 24 格且道路安全低于 45 时应触发道路安全偏低告警。
+- 人口达到 120 且财政信用低于 42 时应触发财政信用偏低告警；人口达到 160 且债务压力高于 60 时应触发债务压力偏高告警；人口达到 100 且现金低于单月市政支出时应触发现金缓冲不足告警；人口达到 300 且行政效率低于 45 时应触发行政效率偏低告警；人口达到 300 且 `AdministrationUtilization` 超过 115% 时应触发“行政容量不足”；启用 3 项以上政策且行政效率低于 55 或 `PolicyBacklog` 偏高时应触发政策执行过载告警；启用 2 项以上政策且 `PolicyBacklog` 高于 55 时应触发“政策积压偏高”。
+- 人口达到 160 且商品平衡低于 70% 时应触发商品供应不足告警；本地供给、资源适配、仓储缓冲或铁路导入不足时应优先提示资源加工园选址、工业地块、货运配套、配送中心或货运铁路站。
+- 拥堵超过 65、已有道路不少于 12 格且主干道少于 6 格时，应触发可升级主干道缓解拥堵告警。
+- 已有道路不少于 18 格且路网连通性低于 45% 时应触发路网连通性偏低告警。
+- 人口超过 30 且公园覆盖低于 45% 时应触发公园覆盖偏低告警；人口超过 120 且医疗覆盖低于 35% 时应触发医疗覆盖偏低告警；人口达到 420、医疗覆盖低于 50% 且没有区域医院时应触发缺少区域医院告警；医疗容量不足、响应偏低或病患积压偏高时应触发对应医疗专项告警；人口达到 360 且灾备低于 45 时应触发缺少应急避难告警。
+- 人口超过 260 且教育覆盖低于 35% 时应触发教育覆盖偏低告警。
+- 人口达到 260 且 `EducationUtilization` 超过 115% 时应触发“教育容量不足”；人口达到 320 且 `StudentBacklog` 高于 55 时应触发“入学积压偏高”；人口达到 360 且 `LearningPipeline` 低于 35 时应触发“学习通道偏弱”。
+- 人口超过 200 且消防覆盖低于 35% 时应触发消防覆盖不足告警。
+- 人口达到 200 后消防保障不足应触发“缺少消防覆盖”；人口达到 260 且 `FireUtilization` 超过 115% 应触发“消防容量不足”；人口达到 220 且 `FireRisk` 高于 55 应触发“火灾风险偏高”；`FireProtection`、`FireRisk`、`FireUtilization` 和 `FireResponse` 达标后应完成 `fire_resilience`。
+- 人口达到 180 且公共服务利用率超过 115% 时应触发公共服务容量不足告警；医疗容量不足时应同时能触发“医疗容量不足”“医疗响应偏低”“病患积压偏高”专项告警，教育容量不足时应同时能触发“教育容量不足”“入学积压偏高”“学习通道偏弱”专项告警，生命关怀容量不足时应同时能触发“生命关怀容量不足”专项告警，警务容量不足时应同时能触发“警务容量不足”“警务响应偏低”“案件积压偏高”专项告警。
+- 当同一帧存在多条财政、基础设施、公共服务、灾害和交通告警时，`Metrics.Alerts` 应保留全部告警，右侧警报栏只显示优先摘要；现金不足、赤字、水电/污水/雨洪过载、医疗/消防/警务/灾害风险、拥堵/事故/服务缺口应排在低影响规划提示之前，溢出计数应与未展示告警数量一致。
+- 人口达到 160 且维护状态低于 45% 时应触发城市维护状态偏低告警。
+- 人口达到 180 且应急响应低于 42% 时应触发应急响应偏低告警；人口达到 220 且灾害风险高于 58 时应触发城市灾害风险偏高告警；建成 1 座接路应急避难中心且灾备达到 65 时应完成“灾害准备”目标。
+- 人口达到 220 且回收覆盖低于 35% 时应触发回收覆盖不足告警；人口达到 220 且回收满载率超过 115% 时应触发回收容量不足告警；人口达到 520、回收满载率超过 105% 且未建设垃圾发电厂时应触发缺少垃圾发电告警。
+- 人口达到 260 且没有任何 2 级以上建筑时应触发建筑成长停滞告警。
+- 需求超过 75 且没有适宜可开发地块时，应触发对应住宅/商业/混合用地/办公/工业分区缺少适宜地块告警。
+- 存档 JSON 应包含版本、日期、现金、债券本金、税率、服务预算、解锁项、道路等级、分区、建筑、自动开发标记和启用政策；读取后应重新计算服务覆盖、行政效率、拥堵、污染、地价、需求、税收、预算开支、债务服务和政策收支。
+
+## 微信小游戏校验
+- Unity/团结导出产物覆盖 `miniprogram/` 后，用微信开发者工具打开项目。
+- 横屏预览无布局裁切。
+- 横屏预览下，当前目标/里程碑面板的 `OBJECTIVE_ACTION_ADVICE` “建议：...”短提示应完整可读；长提示允许换行或截断次要修饰，但不得新增独立弹窗、按钮或底部状态格。
+- 横屏预览下，`PolicyImpactPreview` 的启用/关闭文案和关键 delta 应完整可读；数值较多时允许换行或截断次要项，但不得新增独立弹窗或按钮。
+- 横屏预览下，右侧 `ALERT_PRIORITY_DIGEST` 警报摘要应完整可读；告警过多时使用 `+N` 而不是无限拼接，且不得新增独立弹窗、按钮或底部状态格。
+- 横屏预览下，`RISK_FORECAST_ADVISOR` 的风险焦点、建议行动和 `CashRunwayDays` 应完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格。
+- 横屏预览下，`BUDGET_BREAKDOWN_ADVISOR` 的预算压力、焦点、驱动原因和 `BudgetAction` 短建议应完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json` 或增加 `workers`。
+- 横屏预览下，`DISTRICT_PRIORITY_ADVISOR` 的片区/系统优先级、驱动原因和 `DistrictPriorityAction` 短建议应只在优先级偏高或有风险时出现并完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json` 或增加 `workers`。
+- 横屏预览下，`ROAD_HIERARCHY_ADVISOR` 的道路层级压力、焦点、驱动原因和 `RoadHierarchyAction` 短建议应只在压力偏高或有风险时出现并完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json` 或增加 `workers`。
+- 横屏预览下，`COMMUTE_CORRIDOR_ADVISOR` 的 `CommuteCorridorText` 应在右侧目标提示/insight stack 中完整可读，优先呈现“通勤:压 ... -> ...”类短句；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json` 或增加 `workers`。
+- 横屏预览下，`CITY_EVENT_DIGEST` 的近期事件摘要应完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格。
+- 横屏预览下，`DEMAND_DRIVER_ANALYSIS` 的需求焦点、驱动原因和行动建议应完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格。
+- 横屏预览下，`SERVICE_GAP_ADVISOR` 的服务短板、驱动原因和 `ServiceGapAdvisorAction` 短建议应完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json` 或增加 `workers`。
+- 横屏预览下，`GROWTH_BOTTLENECK_ADVISOR` 的增长瓶颈、驱动原因和 `GrowthBottleneckAction` 短建议应完整可读；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json` 或增加 `workers`。
+- 横屏预览下，`BUILDING_UPGRADE_READINESS_ADVISOR` 的 `BuildingUpgradeReadinessText` 应在右侧目标提示/insight stack 中完整可读，优先呈现“升级:候/阻 ... -> ...”类短句；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json`、增加 `workers`、TS/Vite、WebGL2 或 SharedArrayBuffer。
+- 横屏预览下，`HOUSING_AFFORDABILITY_ADVISOR` 的 `HousingAffordabilityText` 应在右侧目标提示/insight stack 中完整可读，优先呈现“住房:压 ... -> ...”类短句；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json`、增加 `workers`、TS/Vite、WebGL2 或 SharedArrayBuffer。
+- 横屏预览下，`ECONOMIC_SPECIALIZATION_ADVISOR` 的 `EconomicSpecializationText` 应在右侧目标提示/insight stack 中完整可读，优先呈现“经济:专... -> ...”类短句；长文案允许压缩为短标签，但不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json`、增加 `workers`、TS/Vite、WebGL2 或 SharedArrayBuffer。
+- 横屏预览下，`HUD_INSIGHT_PRIORITY_STACK` / `ObjectiveInsightParts` 应只在右侧目标/警报文案区域显示少量最高优先级 insight，`ObjectiveHint` 保持第一优先级；`RISK_FORECAST_ADVISOR`、`BUDGET_BREAKDOWN_ADVISOR`、`DISTRICT_PRIORITY_ADVISOR`、`ROAD_HIERARCHY_ADVISOR`、`COMMUTE_CORRIDOR_ADVISOR`、`HOUSING_AFFORDABILITY_ADVISOR`、`ECONOMIC_SPECIALIZATION_ADVISOR`、`SERVICE_GAP_ADVISOR`、`GROWTH_BOTTLENECK_ADVISOR`、`BUILDING_UPGRADE_READINESS_ADVISOR`、`DEMAND_DRIVER_ANALYSIS`、`CITY_EVENT_DIGEST` 同时有内容时不得无限堆叠，不得新增独立弹窗、按钮或底部状态格，不得修改 `miniprogram/game.json` 或增加 `workers`。
+- `WECHAT_SAFE_LIFECYCLE_FEEDBACK` 在微信环境切后台/暂停时应触发安全自动保存；关键城市命令和保存成功/失败结果应使用安全触觉反馈，Editor 下允许无触觉 fallback，且不得新增 `workers` 或修改 `miniprogram/game.json`。
+- 保存/读取应使用微信 storage；关闭预览后再次打开仍可恢复最近保存的城市。
+- 包体、加载、弱网、分享、震动和真机帧率需要单独记录。

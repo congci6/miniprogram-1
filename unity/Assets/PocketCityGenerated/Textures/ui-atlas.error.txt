@@ -1,0 +1,3 @@
+status=403
+content-type=application/json; charset=utf-8
+{"error":{"message":"token quota is not enough, token remain quota: ＄0.040000, need quota: ＄0.050000 (request id: 202606101000049329308238268d9d6dzfSMpdI)","type":"new_api_error","param":"","code":"pre_consume_token_quota_failed"}}
