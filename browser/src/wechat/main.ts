@@ -94,6 +94,7 @@ const TIME_SCALE_LABELS: Record<CityTimeScale, string> = {
   0: '暂停',
   1: '1x',
   2: '2x',
+  4: '4x',
 };
 const SERVICE_MARKER_COLORS: Record<string, string> = {
   community_park: '#8fe06f',
@@ -521,7 +522,7 @@ class WeChatCityGame {
     const x = this.width - 262;
     const y = 54;
     const width = 250;
-    const height = 380;
+    const height = 450;
     this.layoutActionButtons();
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, height, 6);
@@ -535,12 +536,15 @@ class WeChatCityGame {
     const policyPreviewLine = this.policyPreview
       ? this.compactText(`${this.policyPreview.summary}: ${this.policyPreview.deltas.slice(0, 3).join(' ')}`, 30)
       : '政策: 点按钮查看影响';
+    const insightLines = this.sim.getInsightStack(4).slice(0, 3)
+      .map((insight) => this.compactText(`${insight.label}: ${insight.text}`, 30));
     const lines = [
       `仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()}  ${this.materialLine()}`,
       `工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`,
       firstOrder ? `订单: ${firstOrder.title} +$${firstOrder.rewardCash}` : '订单: 暂无',
       firstOrder ? `需求: ${this.formatCost(firstOrder.required)}` : '需求: 无',
       policyPreviewLine,
+      ...insightLines,
       objective ? `目标: ${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}` : '目标: 阶段目标已完成',
       objective ? objective.description : '继续扩建城市并优化路网',
       objective ? `建议: ${objective.advice}` : '建议: 继续优化服务和路网',
@@ -623,8 +627,8 @@ class WeChatCityGame {
     const width = 48;
     const gap = 6;
     const unlockState = this.sim.getUnlockState();
-    const timeY = 190;
-    ([0, 1, 2] as CityTimeScale[]).forEach((timeScale, index) => {
+    const timeY = 250;
+    ([0, 1, 2, 4] as CityTimeScale[]).forEach((timeScale, index) => {
       this.actionButtons.push({
         kind: 'timeScale',
         timeScale,

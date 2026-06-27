@@ -2,6 +2,7 @@ import { CityGrid } from './grid';
 import {
   CityMaterialInventory,
   CityMetrics,
+  CityInsight,
   CityObjective,
   CityOrder,
   CityPolicy,
@@ -880,6 +881,117 @@ export class CitySimulation {
     const message = `${enabled ? '启用' : '关闭'}${definition.label}`;
     this.pushCityEvent(message);
     return { changed: true, message };
+  }
+
+  getInsightStack(limit = 5): CityInsight[] {
+    const insights: CityInsight[] = [];
+    const objective = this.getObjectives().find((candidate) => !candidate.completed);
+    if (objective) {
+      insights.push({
+        id: `objective:${objective.id}`,
+        label: '目标',
+        text: `${objective.title}: ${objective.advice}`,
+        priority: 1000,
+      });
+    }
+
+    const candidates: CityInsight[] = [
+      {
+        id: 'risk',
+        label: '风险',
+        text: `${this.metrics.forecastFocus}${this.metrics.forecastRisk}: ${this.metrics.forecastAction}`,
+        priority: this.metrics.forecastRisk >= 35 ? 700 + this.metrics.forecastRisk : 0,
+      },
+      {
+        id: 'budget',
+        label: '预算',
+        text: `${this.metrics.budgetFocus}${this.metrics.budgetStress}: ${this.metrics.budgetAction}`,
+        priority: this.metrics.budgetStress >= 35 ? 680 + this.metrics.budgetStress : 0,
+      },
+      {
+        id: 'growth',
+        label: '卡点',
+        text: `${this.metrics.growthBottleneckFocus}${this.metrics.growthBottleneckScore}: ${this.metrics.growthBottleneckAction}`,
+        priority: this.metrics.growthBottleneckScore >= 35 ? 660 + this.metrics.growthBottleneckScore : 0,
+      },
+      {
+        id: 'district',
+        label: '优先级',
+        text: `${this.metrics.districtPriorityFocus}${this.metrics.districtPriorityScore}: ${this.metrics.districtPriorityAction}`,
+        priority: this.metrics.districtPriorityScore >= 35 ? 640 + this.metrics.districtPriorityScore : 0,
+      },
+      {
+        id: 'road',
+        label: '道路',
+        text: `${this.metrics.roadHierarchyFocus}${this.metrics.roadHierarchyPressure}: ${this.metrics.roadHierarchyAction}`,
+        priority: this.metrics.roadHierarchyPressure >= 35 ? 620 + this.metrics.roadHierarchyPressure : 0,
+      },
+      {
+        id: 'commute',
+        label: '通勤',
+        text: `${this.metrics.commuteCorridorFocus}${this.metrics.commuteCorridorScore}: ${this.metrics.commuteCorridorAction}`,
+        priority: this.metrics.commuteCorridorScore >= 35 ? 600 + this.metrics.commuteCorridorScore : 0,
+      },
+      {
+        id: 'service',
+        label: '服务',
+        text: `${this.metrics.serviceGapAdvisorFocus}${this.metrics.serviceGapAdvisorScore}: ${this.metrics.serviceGapAdvisorAction}`,
+        priority: this.metrics.serviceGapAdvisorScore >= 35 ? 580 + this.metrics.serviceGapAdvisorScore : 0,
+      },
+      {
+        id: 'upgrade',
+        label: '升级',
+        text: `候${this.metrics.buildingUpgradeReadyCount}/阻${this.metrics.buildingUpgradeBlockedCount}: ${this.metrics.buildingUpgradeReadinessAction}`,
+        priority: this.metrics.buildingUpgradeReadinessScore >= 35 || this.metrics.buildingUpgradeReadyCount > 0 ? 560 + this.metrics.buildingUpgradeReadinessScore : 0,
+      },
+      {
+        id: 'housing',
+        label: '住房',
+        text: `${this.metrics.housingAffordabilityFocus}${this.metrics.housingAffordabilityScore}: ${this.metrics.housingAffordabilityAction}`,
+        priority: this.metrics.housingAffordabilityScore >= 35 ? 540 + this.metrics.housingAffordabilityScore : 0,
+      },
+      {
+        id: 'economy',
+        label: '经济',
+        text: `${this.metrics.economicSpecializationFocus}${this.metrics.economicSpecializationScore}: ${this.metrics.economicSpecializationAction}`,
+        priority: this.metrics.economicSpecializationScore >= 35 ? 520 + this.metrics.economicSpecializationScore : 0,
+      },
+      {
+        id: 'demand',
+        label: '需求',
+        text: `${this.metrics.demandFocus}${this.metrics.demandUrgency}: ${this.metrics.demandAction}`,
+        priority: this.metrics.demandUrgency >= 45 ? 500 + this.metrics.demandUrgency : 0,
+      },
+      {
+        id: 'alerts',
+        label: '提醒',
+        text: this.metrics.alertDigest,
+        priority: this.metrics.alerts.length > 0 ? 490 + this.metrics.alerts.length * 12 : 0,
+      },
+      {
+        id: 'event',
+        label: '事件',
+        text: this.metrics.recentEvents[0] ?? '',
+        priority: this.metrics.recentEvents.length > 0 ? 470 : 0,
+      },
+    ];
+
+    insights.push(
+      ...candidates
+        .filter((insight) => insight.priority > 0 && insight.text.length > 0)
+        .sort((a, b) => b.priority - a.priority)
+        .slice(0, Math.max(0, limit - insights.length)),
+    );
+
+    if (insights.length === 0) {
+      insights.push({
+        id: 'stable',
+        label: '节奏',
+        text: '按目标扩建并保留现金缓冲',
+        priority: 1,
+      });
+    }
+    return insights.slice(0, limit);
   }
 
   getObjectives(): CityObjective[] {

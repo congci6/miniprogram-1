@@ -204,7 +204,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private isTimeScale(value: unknown): value is CityTimeScale {
-    return value === 0 || value === 1 || value === 2;
+    return value === 0 || value === 1 || value === 2 || value === 4;
   }
 
   private isCityPolicy(value: unknown): value is CityPolicy {
@@ -228,6 +228,7 @@ export class GameScene extends Phaser.Scene {
         orders: this.sim.orders,
         completedOrders: this.sim.completedOrders,
         objectives: this.sim.getObjectives(),
+        insightStack: this.sim.getInsightStack(),
         unlockState: this.sim.getUnlockState(),
         policyStates: this.sim.getPolicyStates(),
         policyPreview: this.policyPreview,

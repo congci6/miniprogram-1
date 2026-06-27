@@ -19,7 +19,7 @@ export enum CityPolicy {
   CongestionPricing, ParkingFees,
 }
 export enum CityTaxLevel { Low, Normal, High }
-export type CityTimeScale = 0 | 1 | 2;
+export type CityTimeScale = 0 | 1 | 2 | 4;
 export enum ServiceBudgetLevel { Lean, Standard, Boosted }
 export enum RoadTier { Local, Arterial }
 export enum BuildingRotation { None = 0, North, East, South, West }
@@ -57,6 +57,9 @@ export interface CityPolicyImpactPreview {
 }
 export interface CityPolicyState {
   policy: CityPolicy; label: string; shortLabel: string; enabled: boolean; preview: CityPolicyImpactPreview;
+}
+export interface CityInsight {
+  id: string; label: string; text: string; priority: number;
 }
 export type CityUnlockActionId = 'roadUpgrade' | 'residentialLevel2' | 'residentialLevel3';
 export interface CityUnlockEntry {

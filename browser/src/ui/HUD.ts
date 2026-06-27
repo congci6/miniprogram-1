@@ -1,4 +1,5 @@
 import {
+  CityInsight,
   CityMaterialInventory,
   CityMetrics,
   CityObjective,
@@ -47,6 +48,7 @@ const TIME_SCALE_LABELS: Record<CityTimeScale, string> = {
   0: '暂停',
   1: '1x',
   2: '2x',
+  4: '4x',
 };
 
 const SERVICE_BUILDING_LABELS: Record<string, string> = {
@@ -110,6 +112,7 @@ export class HUD {
   private selectedInspection: CityTileInspection | null = null;
   private inspectionLegend = '图例: 绿住宅 蓝商业 橙工业 黑道路 粉服务 黄选中';
   private timeScale: CityTimeScale = 1;
+  private insightStack: CityInsight[] = [];
   private policyStates: CityPolicyState[] = [];
   private policyPreview: CityPolicyImpactPreview | null = null;
 
@@ -176,6 +179,7 @@ export class HUD {
       if (e.detail.message) this.selectedMessage = e.detail.message;
       if ('selectedInspection' in e.detail) this.selectedInspection = e.detail.selectedInspection ?? null;
       if ('timeScale' in e.detail && this.isTimeScale(e.detail.timeScale)) this.timeScale = e.detail.timeScale;
+      this.insightStack = e.detail.insightStack ?? this.insightStack;
       this.policyStates = e.detail.policyStates ?? this.policyStates;
       this.policyPreview = e.detail.policyPreview ?? this.policyPreview;
       this.inspectionLegend = e.detail.inspectionLegend ?? this.inspectionLegend;
@@ -289,6 +293,9 @@ export class HUD {
     const policyButtonsText = this.policyStates.length
       ? this.policyStates.map((policyState) => this.policyButtonHtml(policyState)).join('')
       : '<span style="color:#8f9b95">政策加载中</span>';
+    const insightStackText = this.insightStack.length
+      ? this.insightStack.slice(0, 5).map((insight) => this.insightHtml(insight)).join('')
+      : '<span style="color:#8f9b95">暂无高优先级洞察</span><br>';
 
     this.managementPanel.innerHTML =
       '<strong>时间</strong> ' + TIME_SCALE_LABELS[this.timeScale] + '<br>' +
@@ -296,6 +303,7 @@ export class HUD {
       this.timeScaleButtonHtml(0) +
       this.timeScaleButtonHtml(1) +
       this.timeScaleButtonHtml(2) +
+      this.timeScaleButtonHtml(4) +
       '</div>' +
       '<strong>财政</strong> 税率 ' + taxRatePercent + '%<br>' +
       '<div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap">' +
@@ -308,47 +316,8 @@ export class HUD {
       policyButtonsText +
       '</div>' +
       policyPreviewText + '<br>' +
-      '<span style="color:#f2d479">风险: ' + (this.metrics?.forecastRisk ?? 0) +
-      ' / ' + (this.metrics?.forecastFocus ?? '稳定') +
-      ' -> ' + (this.metrics?.forecastAction ?? '继续扩建并保留现金缓冲') +
-      ' / 现金续航: ' + cashRunwayText + '</span><br><br>' +
-      '<span style="color:#ffc08b">预算: ' + (this.metrics?.budgetStress ?? 0) +
-      ' / ' + (this.metrics?.budgetFocus ?? '稳定') +
-      ' / ' + (this.metrics?.budgetDriver ?? '月度现金流稳定') +
-      ' -> ' + (this.metrics?.budgetAction ?? '保持现金缓冲') + '</span><br><br>' +
-      '<span style="color:#ffdf9a">卡点: ' + (this.metrics?.growthBottleneckScore ?? 0) +
-      ' / ' + (this.metrics?.growthBottleneckFocus ?? '起步') +
-      ' / ' + (this.metrics?.growthBottleneckDriver ?? '等待首个成长卡点') +
-      ' -> ' + (this.metrics?.growthBottleneckAction ?? '先接路规划住宅') + '</span><br><br>' +
-      '<span style="color:#bee7b8">经济: ' + (this.metrics?.economicSpecializationScore ?? 0) +
-      ' / ' + (this.metrics?.economicSpecializationFocus ?? '起步') +
-      ' / ' + (this.metrics?.economicSpecializationDriver ?? '等待住商工片区成形') +
-      ' -> ' + (this.metrics?.economicSpecializationAction ?? '先接路规划住宅') + '</span><br><br>' +
-      '<span style="color:#c7dcff">优先级: ' + (this.metrics?.districtPriorityScore ?? 0) +
-      ' / ' + (this.metrics?.districtPriorityFocus ?? '起步') +
-      ' / ' + (this.metrics?.districtPriorityDriver ?? '等待首个片区成形') +
-      ' -> ' + (this.metrics?.districtPriorityAction ?? '先接路规划住宅') + '</span><br><br>' +
-      '<span style="color:#f0d6a8">住房: ' + (this.metrics?.housingAffordabilityScore ?? 0) +
-      ' / ' + (this.metrics?.housingAffordabilityFocus ?? '起步') +
-      ' / ' + (this.metrics?.housingAffordabilityDriver ?? '等待住宅片区成形') +
-      ' -> ' + (this.metrics?.housingAffordabilityAction ?? '先接路规划住宅') + '</span><br><br>' +
-      '<span style="color:#f2c7d4">升级: ' + (this.metrics?.buildingUpgradeReadinessScore ?? 0) +
-      ' / 候' + (this.metrics?.buildingUpgradeReadyCount ?? 0) +
-      ' 阻' + (this.metrics?.buildingUpgradeBlockedCount ?? 0) +
-      ' / ' + (this.metrics?.buildingUpgradeReadinessDriver ?? '等待可升级住宅') +
-      ' -> ' + (this.metrics?.buildingUpgradeReadinessAction ?? '先让住宅自然开发') + '</span><br><br>' +
-      '<span style="color:#d6c7ff">服务短板: ' + (this.metrics?.serviceGapAdvisorFocus ?? '均衡') +
-      ' ' + (this.metrics?.serviceGapAdvisorScore ?? 0) +
-      ' / ' + (this.metrics?.serviceGapAdvisorDriver ?? '暂无住宅服务压力') +
-      ' -> ' + (this.metrics?.serviceGapAdvisorAction ?? '继续观察新住宅片区') + '</span><br><br>' +
-      '<span style="color:#b8d8ff">道路层级: ' + (this.metrics?.roadHierarchyFocus ?? '稳定') +
-      ' ' + (this.metrics?.roadHierarchyPressure ?? 0) +
-      ' / ' + (this.metrics?.roadHierarchyDriver ?? '道路容量可控') +
-      ' -> ' + (this.metrics?.roadHierarchyAction ?? '继续按新区补道路') + '</span><br><br>' +
-      '<span style="color:#a8e0d4">通勤: ' + (this.metrics?.commuteCorridorScore ?? 0) +
-      ' / ' + (this.metrics?.commuteCorridorFocus ?? '顺畅') +
-      ' / ' + (this.metrics?.commuteCorridorDriver ?? '住岗与道路压力可控') +
-      ' -> ' + (this.metrics?.commuteCorridorAction ?? '继续沿主路扩新区') + '</span><br><br>' +
+      '<strong>洞察</strong> 现金续航 ' + cashRunwayText + '<br>' +
+      insightStackText + '<br>' +
       '<strong>分区需求</strong> 住' + (this.metrics?.residentialDemand ?? 0) +
       ' / 商' + (this.metrics?.commercialDemand ?? 0) +
       ' / 工' + (this.metrics?.industrialDemand ?? 0) + '<br>' +
@@ -441,6 +410,10 @@ export class HUD {
       '</button>';
   }
 
+  private insightHtml(insight: CityInsight): string {
+    return '<span style="color:#d8e6ba">' + insight.label + ': ' + insight.text + '</span><br>';
+  }
+
   private orderHtml(order: CityOrder): string {
     return '<div style="margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.08)">' +
       order.title + ' +' + order.rewardCash + '<br>' +
@@ -472,7 +445,7 @@ export class HUD {
   }
 
   private isTimeScale(value: unknown): value is CityTimeScale {
-    return value === 0 || value === 1 || value === 2;
+    return value === 0 || value === 1 || value === 2 || value === 4;
   }
 
   private isCityPolicy(value: unknown): value is CityPolicy {
