@@ -201,8 +201,12 @@ namespace PocketCity.Runtime
         private string commandFeedbackText = string.Empty;
         private string objectivePulseText = string.Empty;
         private string lastObjectiveTitle = string.Empty;
+        private string pendingAdvisorType = string.Empty;
+        private int pendingAdvisorFeedbackVersion = -1;
+        private float pendingAdvisorExpireTime;
         private const int MiniMapColumns = 14;
         private const int MiniMapRows = 6;
+        private const float PendingAdvisorAdoptionLifetime = 20f;
 
         private sealed class OverlayButtonBinding
         {
@@ -1995,6 +1999,7 @@ namespace PocketCity.Runtime
             }
 
             var metrics = controller.Metrics;
+            var advisorType = CityHudViewModelSmartAdvisor.GetAdvisorActionType(lane, metrics);
             if (lane == 0)
             {
                 controller.SetOverlay(OverlayMode.Traffic);
@@ -2011,6 +2016,7 @@ namespace PocketCity.Runtime
                 }
 
                 controller.PublishHudFeedback("\u987e\u95ee \u4ea4\u901a\uff1a\u5df2\u5207\u5230\u4ea4\u901a\u5c42 -> \u4fee\u901a\u65ad\u70b9/\u5347\u7ea7\u74f6\u9888\u8def", true);
+                ArmPendingAdvisorAdoption(advisorType);
                 return;
             }
 
@@ -2023,11 +2029,13 @@ namespace PocketCity.Runtime
                 }
 
                 controller.PublishHudFeedback("\u987e\u95ee \u670d\u52a1\uff1a\u5df2\u5207\u5230\u670d\u52a1\u5c42 -> \u628a\u8bbe\u65bd\u653e\u5728\u7f3a\u53e3\u4f4f\u533a\u8def\u53e3", true);
+                ArmPendingAdvisorAdoption(advisorType);
                 return;
             }
 
             controller.SetOverlay(OverlayMode.LandValue);
             controller.PublishHudFeedback("\u987e\u95ee \u8d22\u653f\uff1a\u770b\u5730\u4ef7/\u9884\u7b97 -> \u8c03\u7a0e\u7387\u3001\u670d\u52a1\u9884\u7b97\u6216\u6682\u7f13\u65b0\u5efa", true);
+            ArmPendingAdvisorAdoption(advisorType);
         }
 
         private static int AdvisorActionPressure(int lane, CityMetrics metrics)
@@ -8780,6 +8788,7 @@ namespace PocketCity.Runtime
         {
             if (controller == null || seenCommandFeedbackVersion == controller.CommandFeedbackVersion)
             {
+                ExpirePendingAdvisorAdoption();
                 return;
             }
 
@@ -8788,7 +8797,84 @@ namespace PocketCity.Runtime
             lastCommandFeedbackSucceeded = controller.LastCommandSucceeded;
             // COMMAND_FEEDBACK_DETAIL_SUMMARY keeps the pulse text tied to the committed command.
             commandFeedbackText = controller.LastCommandFeedbackText;
+            TryConfirmPendingAdvisorAdoption();
             commandFeedbackPulseTimer = 0.65f;
+        }
+
+        private void ArmPendingAdvisorAdoption(string advisorType)
+        {
+            if (string.IsNullOrEmpty(advisorType) || controller == null)
+            {
+                return;
+            }
+
+            pendingAdvisorType = advisorType;
+            pendingAdvisorFeedbackVersion = controller.CommandFeedbackVersion;
+            pendingAdvisorExpireTime = Time.time + PendingAdvisorAdoptionLifetime;
+        }
+
+        private void TryConfirmPendingAdvisorAdoption()
+        {
+            if (string.IsNullOrEmpty(pendingAdvisorType))
+            {
+                return;
+            }
+
+            if (Time.time > pendingAdvisorExpireTime)
+            {
+                ClearPendingAdvisorAdoption();
+                return;
+            }
+
+            if (controller == null || controller.CommandFeedbackVersion <= pendingAdvisorFeedbackVersion)
+            {
+                return;
+            }
+
+            if (!lastCommandFeedbackSucceeded || controller == null || !controller.LastCommandWasCommit)
+            {
+                return;
+            }
+
+            if (!AdvisorAdoptionMatchesCommitKind(pendingAdvisorType, controller.LastCommandCommitKind))
+            {
+                return;
+            }
+
+            CityHudViewModelSmartAdvisor.RecordAdvisorAdoption(pendingAdvisorType);
+            ClearPendingAdvisorAdoption();
+        }
+
+        private void ExpirePendingAdvisorAdoption()
+        {
+            if (!string.IsNullOrEmpty(pendingAdvisorType) && Time.time > pendingAdvisorExpireTime)
+            {
+                ClearPendingAdvisorAdoption();
+            }
+        }
+
+        private void ClearPendingAdvisorAdoption()
+        {
+            pendingAdvisorType = string.Empty;
+            pendingAdvisorFeedbackVersion = -1;
+            pendingAdvisorExpireTime = 0f;
+        }
+
+        private static bool AdvisorAdoptionMatchesCommitKind(string advisorType, CityGameController.CommandCommitKind commitKind)
+        {
+            switch (advisorType)
+            {
+                case "ROAD_HIERARCHY_ADVISOR":
+                case "COMMUTE_CORRIDOR_ADVISOR":
+                    return commitKind == CityGameController.CommandCommitKind.Road;
+                case "RISK_FORECAST_ADVISOR":
+                case "SERVICE_GAP_ADVISOR":
+                    return commitKind == CityGameController.CommandCommitKind.Building;
+                case "BUDGET_BREAKDOWN_ADVISOR":
+                    return commitKind == CityGameController.CommandCommitKind.Management;
+                default:
+                    return false;
+            }
         }
 
         private string BuildCommandFeedbackPulseText(string text)

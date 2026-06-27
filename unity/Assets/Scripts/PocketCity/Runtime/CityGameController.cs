@@ -7,6 +7,16 @@ namespace PocketCity.Runtime
 {
     public sealed class CityGameController : MonoBehaviour
     {
+        public enum CommandCommitKind
+        {
+            None,
+            Management,
+            Building,
+            Road,
+            Zone,
+            Demolish
+        }
+
         [SerializeField] private CityConfig config;
         [SerializeField] private WeChatMiniGameBridge platformBridge;
         [SerializeField] private OverlayMode overlayMode = OverlayMode.Normal;
@@ -17,6 +27,8 @@ namespace PocketCity.Runtime
         private ConstructionPreview currentPreview;
         private int commandFeedbackVersion;
         private bool lastCommandSucceeded;
+        private bool lastCommandWasCommit;
+        private CommandCommitKind lastCommandCommitKind;
         private string lastCommandFeedbackText = string.Empty;
         private string lastPublishedCityEvent = string.Empty;
         private int lastSettlementFeedbackDay = -1;
@@ -40,6 +52,16 @@ namespace PocketCity.Runtime
         public bool LastCommandSucceeded
         {
             get { return lastCommandSucceeded; }
+        }
+
+        public bool LastCommandWasCommit
+        {
+            get { return lastCommandWasCommit; }
+        }
+
+        public CommandCommitKind LastCommandCommitKind
+        {
+            get { return lastCommandCommitKind; }
         }
 
         public string LastCommandFeedbackText
@@ -596,7 +618,7 @@ namespace PocketCity.Runtime
                 simulation.TogglePolicy(policy);
                 var after = PolicyImpactPreview.Capture(simulation.Metrics);
                 currentPreview = BuildPolicyImpactPreview(policy, !wasActive, before, after, simulation.Metrics);
-                PlayCityCommandFeedback(true);
+                PlayCityCommandFeedback(true, CommandCommitKind.Management);
             }
         }
 
@@ -608,7 +630,7 @@ namespace PocketCity.Runtime
                 simulation.CycleTaxLevel();
                 var after = PolicyImpactPreview.Capture(simulation.Metrics);
                 currentPreview = BuildManagementImpactPreview("\u7a0e\u52a1\u9762\u677f", TaxLevelLabel(simulation.TaxLevel), before, after, simulation.Metrics);
-                PlayCityCommandFeedback(true);
+                PlayCityCommandFeedback(true, CommandCommitKind.Management);
             }
         }
 
@@ -620,7 +642,7 @@ namespace PocketCity.Runtime
                 simulation.CycleServiceBudgetLevel();
                 var after = PolicyImpactPreview.Capture(simulation.Metrics);
                 currentPreview = BuildManagementImpactPreview("\u670d\u52a1\u9884\u7b97", ServiceBudgetLabel(simulation.ServiceBudgetLevel), before, after, simulation.Metrics);
-                PlayCityCommandFeedback(true);
+                PlayCityCommandFeedback(true, CommandCommitKind.Management);
             }
         }
 
@@ -628,7 +650,7 @@ namespace PocketCity.Runtime
         {
             if (simulation == null)
             {
-                PlayCityCommandFeedback(false);
+                PlayCityCommandFeedback(false, CommandCommitKind.Management);
                 return false;
             }
 
@@ -638,7 +660,7 @@ namespace PocketCity.Runtime
             currentPreview = issued
                 ? BuildManagementImpactPreview("\u503a\u52a1\u9762\u677f", "\u503a\u5238\u5df2\u5165\u8d26", before, after, simulation.Metrics)
                 : BuildManagementBlockedPreview("\u503a\u52a1\u9762\u677f", before, simulation.Metrics);
-            PlayCityCommandFeedback(issued);
+            PlayCityCommandFeedback(issued, CommandCommitKind.Management);
             return issued;
         }
 
@@ -655,7 +677,7 @@ namespace PocketCity.Runtime
             var placed = simulation.TryPlaceBuilding(buildingId, new GridPos(gridX, gridY), out preview);
             AddCommandCityDeltaLine(preview, before, PolicyImpactPreview.Capture(Metrics), placed);
             currentPreview = preview;
-            PlayCityCommandFeedback(placed);
+            PlayCityCommandFeedback(placed, CommandCommitKind.Building);
             return placed;
         }
 
@@ -672,7 +694,7 @@ namespace PocketCity.Runtime
             var built = simulation.TryBuildRoad(new GridPos(fromX, fromY), new GridPos(toX, toY), out preview);
             AddCommandCityDeltaLine(preview, before, PolicyImpactPreview.Capture(Metrics), built);
             currentPreview = preview;
-            PlayCityCommandFeedback(built);
+            PlayCityCommandFeedback(built, CommandCommitKind.Road);
             return built;
         }
 
@@ -689,7 +711,7 @@ namespace PocketCity.Runtime
             var upgraded = simulation.TryUpgradeRoad(new GridPos(gridX, gridY), out preview);
             AddCommandCityDeltaLine(preview, before, PolicyImpactPreview.Capture(Metrics), upgraded);
             currentPreview = preview;
-            PlayCityCommandFeedback(upgraded);
+            PlayCityCommandFeedback(upgraded, CommandCommitKind.Road);
             return upgraded;
         }
 
@@ -706,7 +728,7 @@ namespace PocketCity.Runtime
             var zoned = simulation.TrySetZone(new GridPos(fromX, fromY), new GridPos(toX, toY), zone, out preview);
             AddCommandCityDeltaLine(preview, before, PolicyImpactPreview.Capture(Metrics), zoned);
             currentPreview = preview;
-            PlayCityCommandFeedback(zoned);
+            PlayCityCommandFeedback(zoned, CommandCommitKind.Zone);
             return zoned;
         }
 
@@ -723,14 +745,16 @@ namespace PocketCity.Runtime
             var demolished = simulation.TryDemolishAt(new GridPos(gridX, gridY), out preview);
             AddCommandCityDeltaLine(preview, before, PolicyImpactPreview.Capture(Metrics), demolished);
             currentPreview = preview;
-            PlayCityCommandFeedback(demolished);
+            PlayCityCommandFeedback(demolished, CommandCommitKind.Demolish);
             return demolished;
         }
 
-        private void PlayCityCommandFeedback(bool success)
+        private void PlayCityCommandFeedback(bool success, CommandCommitKind commitKind)
         {
             // COMMAND_FEEDBACK_PULSE exposes command results to the runtime HUD even without a platform bridge.
             lastCommandSucceeded = success;
+            lastCommandWasCommit = true;
+            lastCommandCommitKind = commitKind;
             lastCommandFeedbackText = BuildCommandFeedbackText(currentPreview, success, Metrics);
             commandFeedbackVersion += 1;
 
@@ -754,6 +778,8 @@ namespace PocketCity.Runtime
         {
             // TOOL_SWITCH_HUD_PULSE updates the HUD without invoking platform vibration.
             lastCommandSucceeded = success;
+            lastCommandWasCommit = false;
+            lastCommandCommitKind = CommandCommitKind.None;
             lastCommandFeedbackText = CompactCommandFeedbackText(text);
             commandFeedbackVersion += 1;
         }

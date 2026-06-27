@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using PocketCity.Core;
 using PocketCity.Simulation;
+using UnityEngine;
 
 namespace PocketCity.Runtime
 {
@@ -8,9 +9,11 @@ namespace PocketCity.Runtime
     {
         private const float ContextBoostScale = 1f;
         private static readonly AdvisorPriorityScorer Scorer = new AdvisorPriorityScorer();
+        private static AdvisorContextTracker contextTracker;
 
         public static void SetContextTracker(AdvisorContextTracker tracker)
         {
+            contextTracker = tracker;
             Scorer.SetContextTracker(tracker);
         }
 
@@ -55,8 +58,18 @@ namespace PocketCity.Runtime
 
             for (var i = 0; i < candidates.Count && result.Count < maxInsights; i += 1)
             {
+                if (contextTracker != null && !contextTracker.ShouldShowAdvisor(candidates[i].Type))
+                {
+                    continue;
+                }
+
                 result.Add(candidates[i].Text);
-                Scorer.MarkShown(candidates[i].Type);
+                MarkAdvisorShown(candidates[i].Type);
+            }
+
+            if (result.Count < maxInsights)
+            {
+                AppendContextHint(result, metrics, maxInsights);
             }
 
             if (result.Count < maxInsights && !string.IsNullOrEmpty(snapshot.RecentEventText))
@@ -102,6 +115,24 @@ namespace PocketCity.Runtime
             return string.Empty;
         }
 
+        public static string GetAdvisorActionType(int lane, CityMetrics metrics)
+        {
+            foreach (var advisorType in GetAdvisorTypesForLane(lane, metrics))
+            {
+                return advisorType;
+            }
+
+            return string.Empty;
+        }
+
+        public static void RecordAdvisorAdoption(string advisorType)
+        {
+            if (!string.IsNullOrEmpty(advisorType))
+            {
+                Scorer.RecordUserAction(advisorType);
+            }
+        }
+
         private static void AddInsightPriority(List<InsightPriority> candidates, string type, string text, int priority, int order)
         {
             if (string.IsNullOrEmpty(text))
@@ -138,6 +169,57 @@ namespace PocketCity.Runtime
             return snapshot == null || string.IsNullOrEmpty(snapshot.ObjectiveHint)
                 ? string.Empty
                 : snapshot.ObjectiveHint;
+        }
+
+        private static IEnumerable<string> GetAdvisorTypesForLane(int lane, CityMetrics metrics)
+        {
+            if (lane == 0)
+            {
+                var roadPressure = metrics != null ? Mathf.Max(metrics.RoadBottleneckPressure, metrics.IntersectionDelay) : 0;
+                var commutePressure = metrics != null ? Mathf.Max(0, 100 - metrics.CommuteEfficiency) : 0;
+                yield return roadPressure >= commutePressure
+                    ? "ROAD_HIERARCHY_ADVISOR"
+                    : "COMMUTE_CORRIDOR_ADVISOR";
+                yield break;
+            }
+
+            if (lane == 1)
+            {
+                var riskPressure = metrics != null ? Mathf.Max(metrics.HealthRisk, metrics.FireRisk) : 0;
+                yield return riskPressure > 80
+                    ? "RISK_FORECAST_ADVISOR"
+                    : "SERVICE_GAP_ADVISOR";
+                yield break;
+            }
+
+            yield return "BUDGET_BREAKDOWN_ADVISOR";
+        }
+
+        private static void MarkAdvisorShown(string advisorType)
+        {
+            Scorer.MarkShown(advisorType);
+            if (contextTracker != null)
+            {
+                contextTracker.MarkAdvisorShown(advisorType);
+            }
+        }
+
+        private static void AppendContextHint(List<string> result, CityMetrics metrics, int maxInsights)
+        {
+            if (result == null || result.Count >= maxInsights)
+            {
+                return;
+            }
+
+            var hint = contextTracker != null
+                ? contextTracker.GetContextHint(metrics)
+                : GetContextHint(metrics);
+            if (string.IsNullOrEmpty(hint) || result.Contains(hint))
+            {
+                return;
+            }
+
+            result.Add(hint);
         }
 
         private sealed class InsightPriority

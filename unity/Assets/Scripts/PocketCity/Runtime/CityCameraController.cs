@@ -5,6 +5,7 @@ namespace PocketCity.Runtime
 {
     public sealed class CityCameraController : MonoBehaviour
     {
+        // MINIMAP_CAMERA_CONTROLS: runtime HUD minimap buttons route into ZoomIn, FrameMap, ZoomOut and AdjustZoom here.
         [SerializeField] private Camera targetCamera;
         [SerializeField] private Vector2 mapSize = new Vector2(64f, 64f);
         [SerializeField] private float keyboardPanSpeed = 24f;

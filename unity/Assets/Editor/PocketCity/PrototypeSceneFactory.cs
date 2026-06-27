@@ -12,6 +12,9 @@ namespace PocketCity.Editor
     {
         private const string ScenePath = "Assets/Scenes/PocketCityPrototype.unity";
         private const string ConfigPath = "Assets/Resources/CityConfig.asset";
+        // Prototype scene expects generated materials from VisualAssetFactory:
+        // MixedUse.mat, Office.mat, RoadLine.mat, Roof.mat, TreeTrunk.mat, TreeCanopy.mat,
+        // Rock.mat, LockedArea.mat, TrafficPulse.mat, ServiceNeed.mat, PreviewOk.mat, PreviewBlocked.mat.
 
         [MenuItem("Pocket City/Create Prototype Scene")]
         public static void CreatePrototypeScene()
