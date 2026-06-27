@@ -1,12 +1,20 @@
 import * as Phaser from 'phaser';
-import { CitySimulation } from '@/simulation/city-simulation';
+import { CityOfflineProgressResult, CitySimulation, CitySimulationSaveData } from '@/simulation/city-simulation';
 import { IsometricRenderer } from '@/game/view/iso-renderer';
 import { MaterialId, PlanningTool } from '@/types/index';
+
+const BROWSER_SAVE_KEY = 'pocket-city-planner-browser-save';
+const MATERIAL_LABELS: Record<MaterialId, string> = {
+  wood: '木材',
+  metal: '金属',
+  plastic: '塑料',
+};
 
 export class GameScene extends Phaser.Scene {
   private sim!: CitySimulation;
   private isoRender!: IsometricRenderer;
   private hudTimer = 0;
+  private saveTimer = 0;
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: { x: number; y: number } | null = null;
   private paintedThisDrag = new Set<string>();
@@ -15,10 +23,12 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     this.sim = new CitySimulation(24, 18);
+    const restoreMessage = this.restore();
     this.isoRender = new IsometricRenderer(this, this.sim);
 
     this.cameras.main.setZoom(1.8);
     this.cameras.main.centerOn(0, 0);
+    window.addEventListener('beforeunload', () => this.save());
 
     window.addEventListener('city-tool-change', ((event: Event) => {
       this.selectedTool = (event as CustomEvent<{ tool: PlanningTool }>).detail.tool;
@@ -28,11 +38,13 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('city-production-start', ((event: Event) => {
       const materialId = (event as CustomEvent<{ materialId: MaterialId }>).detail.materialId;
       const result = this.sim.startProduction(materialId);
+      if (result.changed) this.save();
       this.publishMetrics(result.message);
     }) as EventListener);
     window.addEventListener('city-order-fulfill', ((event: Event) => {
       const orderId = (event as CustomEvent<{ orderId: string }>).detail.orderId;
       const result = this.sim.fulfillOrder(orderId);
+      if (result.changed) this.save();
       this.publishMetrics(result.message);
     }) as EventListener);
     window.addEventListener('city-upgrade-selected-residential', () => {
@@ -42,6 +54,7 @@ export class GameScene extends Phaser.Scene {
       }
       const result = this.sim.upgradeResidentialAt(this.selectedTile.x, this.selectedTile.y);
       if (result.changed) this.isoRender.render();
+      if (result.changed) this.save();
       window.dispatchEvent(new CustomEvent('city-tile-selected', {
         detail: { tile: this.sim.grid.getTile(this.selectedTile.x, this.selectedTile.y), message: result.message },
       }));
@@ -56,15 +69,20 @@ export class GameScene extends Phaser.Scene {
     });
     this.input.on('pointerup', () => this.paintedThisDrag.clear());
 
-    this.publishMetrics('选择工具后点击地块开始规划');
+    this.publishMetrics(restoreMessage || '选择工具后点击地块开始规划');
   }
 
   update(_time: number, delta: number): void {
     this.sim.tick(delta / 1000);
     this.hudTimer += delta / 1000;
+    this.saveTimer += delta / 1000;
     if (this.hudTimer >= 0.5) {
       this.hudTimer = 0;
       this.publishMetrics();
+    }
+    if (this.saveTimer >= 5) {
+      this.saveTimer = 0;
+      this.save();
     }
   }
 
@@ -80,6 +98,7 @@ export class GameScene extends Phaser.Scene {
     const selectedTile = this.sim.grid.getTile(tile.x, tile.y);
     this.selectedTile = tile;
     if (result.changed) this.isoRender.render();
+    if (result.changed) this.save();
 
     window.dispatchEvent(new CustomEvent('city-tile-selected', {
       detail: { tile: selectedTile, message: result.message },
@@ -108,5 +127,50 @@ export class GameScene extends Phaser.Scene {
         message,
       },
     }));
+  }
+
+  private restore(): string {
+    try {
+      const raw = window.localStorage.getItem(BROWSER_SAVE_KEY);
+      if (!raw) return '';
+      const data: unknown = JSON.parse(raw);
+      if (!this.isSaveData(data)) return '';
+      const offline = this.sim.restoreSnapshot(data);
+      this.save();
+      return this.formatOfflineMessage(offline) || '已读取本地城市存档';
+    } catch (error) {
+      console.warn('Failed to restore browser city save', error);
+      return '';
+    }
+  }
+
+  private save(): void {
+    try {
+      window.localStorage.setItem(BROWSER_SAVE_KEY, JSON.stringify(this.sim.createSnapshot()));
+    } catch (error) {
+      console.warn('Failed to save browser city', error);
+    }
+  }
+
+  private isSaveData(value: unknown): value is CitySimulationSaveData {
+    if (!value || typeof value !== 'object') return false;
+    const candidate = value as Partial<CitySimulationSaveData>;
+    return (candidate.version === 1 || candidate.version === 2 || candidate.version === 3)
+      && Array.isArray(candidate.tiles)
+      && typeof candidate.metrics === 'object';
+  }
+
+  private formatOfflineMessage(result: CityOfflineProgressResult): string {
+    if (result.daysElapsed <= 0) return '';
+    const produced = (Object.entries(result.materialsProduced) as Array<[MaterialId, number]>)
+      .filter(([, count]) => count > 0)
+      .map(([materialId, count]) => `${MATERIAL_LABELS[materialId]}x${count}`)
+      .join('、');
+    const suffixes = [
+      produced ? `产出 ${produced}` : '',
+      result.storageBlocked ? '仓库已满，生产暂停' : '',
+      result.capped ? '已达到离线结算上限' : '',
+    ].filter(Boolean);
+    return `离线推进 ${result.daysElapsed} 天${suffixes.length ? '，' + suffixes.join('，') : ''}`;
   }
 }

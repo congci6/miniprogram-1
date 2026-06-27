@@ -1,4 +1,4 @@
-import { CitySimulation, type CitySimulationSaveData } from '@/simulation/city-simulation';
+import { CityOfflineProgressResult, CitySimulation, type CitySimulationSaveData } from '@/simulation/city-simulation';
 import { MaterialCost, MaterialId, PlanningTool, TerrainType, ZoneType } from '@/types/index';
 import type { Tile } from '@/simulation/grid';
 
@@ -131,7 +131,7 @@ class WeChatCityGame {
     });
     this.runtime.onHide?.(() => this.save());
     this.runtime.onShow?.(() => {
-      this.statusText = '城市已恢复，继续规划';
+      if (!this.restore()) this.statusText = '城市已恢复，继续规划';
     });
   }
 
@@ -487,11 +487,13 @@ class WeChatCityGame {
     this.ctx.closePath();
   }
 
-  private restore(): void {
+  private restore(): boolean {
     const data = this.runtime.getStorageSync?.(SAVE_KEY);
-    if (!this.isSaveData(data)) return;
-    this.sim.restoreSnapshot(data);
-    this.statusText = '已读取本地城市存档';
+    if (!this.isSaveData(data)) return false;
+    const offline = this.sim.restoreSnapshot(data);
+    this.statusText = this.formatOfflineMessage(offline) || '已读取本地城市存档';
+    this.save();
+    return true;
   }
 
   private save(): void {
@@ -501,9 +503,23 @@ class WeChatCityGame {
   private isSaveData(value: unknown): value is CitySimulationSaveData {
     if (!value || typeof value !== 'object') return false;
     const candidate = value as Partial<CitySimulationSaveData>;
-    return (candidate.version === 1 || candidate.version === 2)
+    return (candidate.version === 1 || candidate.version === 2 || candidate.version === 3)
       && Array.isArray(candidate.tiles)
       && typeof candidate.metrics === 'object';
+  }
+
+  private formatOfflineMessage(result: CityOfflineProgressResult): string {
+    if (result.daysElapsed <= 0) return '';
+    const produced = (Object.entries(result.materialsProduced) as Array<[MaterialId, number]>)
+      .filter(([, count]) => count > 0)
+      .map(([materialId, count]) => `${MATERIAL_LABELS[materialId]}x${count}`)
+      .join('、');
+    const suffixes = [
+      produced ? `产出 ${produced}` : '',
+      result.storageBlocked ? '仓库已满，生产暂停' : '',
+      result.capped ? '已达到离线结算上限' : '',
+    ].filter(Boolean);
+    return `离线推进 ${result.daysElapsed} 天${suffixes.length ? '，' + suffixes.join('，') : ''}`;
   }
 
   private materialLine(): string {

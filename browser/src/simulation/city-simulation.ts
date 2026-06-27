@@ -30,6 +30,13 @@ export interface PlanningActionResult {
   message: string;
 }
 
+export interface CityOfflineProgressResult {
+  daysElapsed: number;
+  materialsProduced: CityMaterialInventory;
+  storageBlocked: boolean;
+  capped: boolean;
+}
+
 interface TileSnapshot {
   x: number;
   y: number;
@@ -44,7 +51,7 @@ export interface CitySimulationLegacySnapshot {
   tiles: TileSnapshot[];
 }
 
-export interface CitySimulationSnapshot {
+export interface CitySimulationSnapshotV2 {
   version: 2;
   metrics: CityMetrics;
   materials: CityMaterialInventory;
@@ -57,7 +64,12 @@ export interface CitySimulationSnapshot {
   tiles: TileSnapshot[];
 }
 
-export type CitySimulationSaveData = CitySimulationLegacySnapshot | CitySimulationSnapshot;
+export interface CitySimulationSnapshot extends Omit<CitySimulationSnapshotV2, 'version'> {
+  version: 3;
+  savedAtMs: number;
+}
+
+export type CitySimulationSaveData = CitySimulationLegacySnapshot | CitySimulationSnapshotV2 | CitySimulationSnapshot;
 
 const ZONE_STATS: Partial<Record<ZoneType, { housing: number; jobs: number; pollution: number; label: string }>> = {
   [ZoneType.Residential]: { housing: 24, jobs: 0, pollution: 1, label: '住宅区' },
@@ -146,6 +158,8 @@ const ROAD_COST = 180;
 const ERASE_COST = 20;
 const STORAGE_CAPACITY = 30;
 const MAX_RESIDENTIAL_LEVEL = 3;
+const OFFLINE_MS_PER_DAY = 60_000;
+const MAX_OFFLINE_DAYS = 72;
 
 export class CitySimulation {
   readonly grid: CityGrid;
@@ -321,7 +335,7 @@ export class CitySimulation {
     }));
   }
 
-  createSnapshot(): CitySimulationSnapshot {
+  createSnapshot(nowMs = Date.now()): CitySimulationSnapshot {
     const tiles: CitySimulationSnapshot['tiles'] = [];
     for (let y = 0; y < this.grid.height; y++) {
       for (let x = 0; x < this.grid.width; x++) {
@@ -334,7 +348,8 @@ export class CitySimulation {
     }
 
     return {
-      version: 2,
+      version: 3,
+      savedAtMs: nowMs,
       metrics: {
         ...this.metrics,
         alerts: [...this.metrics.alerts],
@@ -351,11 +366,12 @@ export class CitySimulation {
     };
   }
 
-  restoreSnapshot(snapshot: CitySimulationSaveData): void {
-    if (snapshot.version !== 1 && snapshot.version !== 2) return;
+  restoreSnapshot(snapshot: CitySimulationSaveData, nowMs = Date.now()): CityOfflineProgressResult {
+    const offlineResult = this.createEmptyOfflineResult();
+    if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3) return offlineResult;
 
     Object.assign(this.metrics, snapshot.metrics);
-    if (snapshot.version === 2) {
+    if (snapshot.version === 2 || snapshot.version === 3) {
       this.materials.wood = Math.max(0, snapshot.materials.wood ?? 0);
       this.materials.metal = Math.max(0, snapshot.materials.metal ?? 0);
       this.materials.plastic = Math.max(0, snapshot.materials.plastic ?? 0);
@@ -391,6 +407,8 @@ export class CitySimulation {
     this.ensureOrders();
     this.computeMetrics();
     if (this.evaluateObjectives().length > 0) this.computeMetrics();
+    if (snapshot.version === 3) return this.applyOfflineProgress(snapshot.savedAtMs, nowMs);
+    return offlineResult;
   }
 
   getTaxRevenue(): number {
@@ -416,6 +434,36 @@ export class CitySimulation {
       this.materials[job.materialId]++;
       this.productionQueue.splice(i, 1);
     }
+  }
+
+  private applyOfflineProgress(savedAtMs: number, nowMs: number): CityOfflineProgressResult {
+    const elapsedMs = Math.max(0, nowMs - savedAtMs);
+    const rawDays = Math.floor(elapsedMs / OFFLINE_MS_PER_DAY);
+    const daysElapsed = Math.min(rawDays, MAX_OFFLINE_DAYS);
+    const result = this.createEmptyOfflineResult();
+    result.daysElapsed = daysElapsed;
+    result.capped = rawDays > MAX_OFFLINE_DAYS;
+    if (daysElapsed <= 0) return result;
+
+    const beforeMaterials = { ...this.materials };
+    this.tick(daysElapsed);
+    result.materialsProduced = {
+      wood: Math.max(0, this.materials.wood - beforeMaterials.wood),
+      metal: Math.max(0, this.materials.metal - beforeMaterials.metal),
+      plastic: Math.max(0, this.materials.plastic - beforeMaterials.plastic),
+    };
+    result.storageBlocked = this.getStorageUsed() >= STORAGE_CAPACITY
+      && this.productionQueue.some((job) => job.remainingDays <= 0);
+    return result;
+  }
+
+  private createEmptyOfflineResult(): CityOfflineProgressResult {
+    return {
+      daysElapsed: 0,
+      materialsProduced: { wood: 0, metal: 0, plastic: 0 },
+      storageBlocked: false,
+      capped: false,
+    };
   }
 
   private appendObjectiveRewards(message: string): string {
