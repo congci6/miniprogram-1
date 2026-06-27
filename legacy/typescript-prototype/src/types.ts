@@ -1,4 +1,4 @@
-export type GridPos = { x: number; y: number };
+﻿export type GridPos = { x: number; y: number };
 
 export type GridRect = { x: number; y: number; w: number; h: number };
 
@@ -6,7 +6,7 @@ export type TerrainType = 'plain' | 'water' | 'hill';
 
 export type ZoneType = 'none' | 'residential' | 'commercial' | 'industrial';
 
-export type OverlayMode = 'normal' | 'traffic' | 'pollution';
+export type OverlayMode = 'normal' | 'traffic' | 'pollution' | 'zone';
 
 export type BuildingCategory =
   | 'residential'

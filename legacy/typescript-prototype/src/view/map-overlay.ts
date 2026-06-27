@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+﻿import * as THREE from 'three';
 import type { CityState } from '../simulation/city-state';
 import type { OverlayMode } from '../types';
 
@@ -72,6 +72,39 @@ export class MapOverlay extends THREE.Group {
       geometryByLevel.set(level, geometry);
     });
     this.addLevelMeshes(geometryByLevel, [0xfbbf24, 0xf97316, 0xb91c1c], 0.46);
+  }
+
+  private buildZoneOverlay(city: CityState): void {
+    const colors: Record<string, number> = {
+      residential: 0x22c55e,
+      commercial: 0x38bdf8,
+      industrial: 0xf97316,
+    };
+    const geometryByZone = new Map<string, THREE.Geometry>();
+    const dummy = new THREE.Mesh(this.sourceGeometry);
+    city.grid.forEachTile((tile, pos) => {
+      if (tile.zone === 'none') {
+        return;
+      }
+      const geometry = geometryByZone.get(tile.zone) ?? new THREE.Geometry();
+      dummy.position.set(pos.x - city.grid.width / 2 + 0.5, 0.12, pos.y - city.grid.height / 2 + 0.5);
+      dummy.scale.set(0.94, 1, 0.94);
+      dummy.rotation.set(0, 0, 0);
+      dummy.updateMatrix();
+      geometry.merge(this.sourceGeometry, dummy.matrix);
+      geometryByZone.set(tile.zone, geometry);
+    });
+    for (const [zone, geometry] of geometryByZone.entries()) {
+      geometry.computeFaceNormals();
+      geometry.computeBoundingSphere();
+      const material = new THREE.MeshBasicMaterial({
+        color: colors[zone] ?? 0x9ca3af,
+        transparent: true,
+        opacity: 0.35,
+        depthWrite: false,
+      });
+      this.add(new THREE.Mesh(geometry, material));
+    }
   }
 
   private addLevelMeshes(geometryByLevel: Map<number, THREE.Geometry>, colors: number[], opacity: number): void {

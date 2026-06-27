@@ -1,4 +1,4 @@
-import type { ConstructionPreview } from '../simulation/construction-preview';
+﻿import type { ConstructionPreview } from '../simulation/construction-preview';
 import type { CityMetrics, OverlayMode } from '../types';
 import { formatAlertLine, formatCityTitle, formatMetrics, formatObjectiveLine } from './info-panel';
 import type { BuildToolId } from './toolbar';
@@ -322,6 +322,8 @@ function overlayLabel(mode: OverlayMode): string {
       return '交通图层';
     case 'pollution':
       return '污染图层';
+    case 'zone':
+      return '区划图层';
   }
 }
 

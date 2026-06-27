@@ -1,8 +1,8 @@
-import { buildingIdForTool } from '../ui/build-menu';
+﻿import { buildingIdForTool } from '../ui/build-menu';
 import type * as THREE from 'three';
 import { HudController, type HudAction } from '../ui/hud';
 import { ToastQueue } from '../ui/toast';
-import { TOOLBAR_ITEMS, toolUnlockStatus, type BuildToolId } from '../ui/toolbar';
+import { isZoneTool, zoneTypeForTool, TOOLBAR_ITEMS, toolUnlockStatus, type BuildToolId } from '../ui/toolbar';
 import { CameraRig } from './camera';
 import { FrameLoop } from './frame-loop';
 import { InputController } from './input';
@@ -209,7 +209,7 @@ export class CityGameApp {
 
   private cycleOverlayMode(): void {
     this.overlayMode =
-      this.overlayMode === 'normal' ? 'traffic' : this.overlayMode === 'traffic' ? 'pollution' : 'normal';
+      this.overlayMode === 'normal' ? 'zone' : this.overlayMode === 'zone' ? 'traffic' : this.overlayMode === 'traffic' ? 'pollution' : 'normal';
     this.cityScene.setOverlayMode(this.overlayMode, this.city);
     this.toast.show(`已切换到${overlayName(this.overlayMode)}`);
   }
@@ -275,6 +275,14 @@ function toolName(tool: BuildToolId): string {
   switch (tool) {
     case 'road':
       return '道路';
+    case 'zone_residential':
+      return '住宅区划';
+    case 'zone_commercial':
+      return '商业区划';
+    case 'zone_industrial':
+      return '工业区划';
+    case 'zone_clear':
+      return '清空区划';
     case 'residential_pod':
       return '住宅';
     case 'market_corner':
@@ -289,6 +297,8 @@ function toolName(tool: BuildToolId): string {
       return '水务';
     case 'demolish':
       return '拆除';
+    default:
+      return tool;
   }
 }
 
@@ -296,9 +306,13 @@ function overlayName(mode: OverlayMode): string {
   switch (mode) {
     case 'normal':
       return '普通视图';
+    case 'zone':
+      return '区划图层';
     case 'traffic':
       return '交通图层';
     case 'pollution':
       return '污染图层';
+    default:
+      return mode;
   }
 }
