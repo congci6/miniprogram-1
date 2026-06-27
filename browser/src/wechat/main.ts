@@ -101,6 +101,11 @@ const TAX_LABELS: Record<CityTaxLevel, string> = {
   [CityTaxLevel.High]: '高税',
 };
 const SERVICE_BUILDING_LABELS: Record<string, string> = {
+  residential_l1: '住宅 1 级',
+  residential_l2: '住宅 2 级',
+  residential_l3: '住宅 3 级',
+  commercial_l1: '商业建筑',
+  industrial_l1: '工业建筑',
   community_park: '社区公园',
   community_clinic: '社区诊所',
   community_school: '社区学校',
@@ -173,7 +178,7 @@ class WeChatCityGame {
       const now = Date.now();
       const delta = Math.min(0.25, (now - this.lastTime) / 1000);
       this.lastTime = now;
-      this.sim.tick(delta);
+      if (this.sim.tick(delta)) this.save();
       this.draw();
       requestFrame(frame);
     };
@@ -314,6 +319,11 @@ class WeChatCityGame {
   }
 
   private drawZoneMarker(tile: Tile, x: number, y: number): void {
+    if (!tile.buildingId) {
+      this.drawVacantZoneMarker(tile.zone, x, y);
+      return;
+    }
+
     switch (tile.zone) {
       case ZoneType.Residential:
         this.drawResidentialMarker(tile.buildingId, x, y);
@@ -326,6 +336,25 @@ class WeChatCityGame {
         return;
       default:
     }
+  }
+
+  private drawVacantZoneMarker(zone: ZoneType, x: number, y: number): void {
+    const color = zone === ZoneType.Residential
+      ? '#d8e6ba'
+      : zone === ZoneType.Commercial
+        ? '#c7dcff'
+        : '#f1c08b';
+    this.ctx.save();
+    this.ctx.beginPath();
+    this.ctx.arc(x, y - 5, 5, 0, Math.PI * 2);
+    this.ctx.globalAlpha = 0.22;
+    this.ctx.fillStyle = color;
+    this.ctx.fill();
+    this.ctx.globalAlpha = 0.65;
+    this.ctx.strokeStyle = color;
+    this.ctx.lineWidth = 2;
+    this.ctx.stroke();
+    this.ctx.restore();
   }
 
   private drawResidentialMarker(buildingId: string, x: number, y: number): void {
@@ -415,7 +444,7 @@ class WeChatCityGame {
         ? `建筑: ${SERVICE_BUILDING_LABELS[this.selectedTile.buildingId] ?? this.selectedTile.buildingId}`
         : `服务缺口: ${Math.round(m.serviceGapPressure)}`,
       this.selectedTile?.zone === ZoneType.Residential
-        ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile)}`
+        ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile) || '待开发'}`
         : `订单交付: ${this.sim.completedOrders}`,
       m.alerts.length ? `提醒: ${m.alerts.slice(0, 2).join('、')}` : '提醒: 城市运行平稳',
     ];
@@ -628,8 +657,9 @@ class WeChatCityGame {
   }
 
   private residentialLevelFromBuilding(buildingId: string): number {
+    if (buildingId === 'residential_l1') return 1;
     const match = /^residential_l([2-3])$/.exec(buildingId);
-    return match ? Number(match[1]) : 1;
+    return match ? Number(match[1]) : 0;
   }
 
   private colorForTile(tile: Tile): string {

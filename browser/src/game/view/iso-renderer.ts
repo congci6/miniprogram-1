@@ -96,6 +96,11 @@ export class IsometricRenderer {
   }
 
   private drawZoneMarker(tile: Tile, wx: number, wy: number): void {
+    if (!tile.buildingId) {
+      this.drawVacantZoneMarker(tile.zone, wx, wy);
+      return;
+    }
+
     switch (tile.zone) {
       case ZoneType.Residential:
         this.drawResidentialMarker(tile.buildingId, wx, wy);
@@ -108,6 +113,18 @@ export class IsometricRenderer {
         return;
       default:
     }
+  }
+
+  private drawVacantZoneMarker(zone: ZoneType, wx: number, wy: number): void {
+    const color = zone === ZoneType.Residential
+      ? 0xd8e6ba
+      : zone === ZoneType.Commercial
+        ? 0xc7dcff
+        : 0xf1c08b;
+    this.gfx.fillStyle(color, 0.22);
+    this.gfx.fillCircle(wx, wy - 5, 5);
+    this.gfx.lineStyle(2, color, 0.65);
+    this.gfx.strokeCircle(wx, wy - 5, 5);
   }
 
   private drawResidentialMarker(buildingId: string, wx: number, wy: number): void {

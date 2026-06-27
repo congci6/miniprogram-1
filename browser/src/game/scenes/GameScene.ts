@@ -92,7 +92,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    this.sim.tick(delta / 1000);
+    const simulationChanged = this.sim.tick(delta / 1000);
+    if (simulationChanged) {
+      this.isoRender.render();
+      this.save();
+    }
     this.hudTimer += delta / 1000;
     this.saveTimer += delta / 1000;
     if (this.hudTimer >= 0.5) {

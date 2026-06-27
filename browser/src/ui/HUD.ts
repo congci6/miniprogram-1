@@ -40,6 +40,11 @@ const TAX_LABELS: Record<CityTaxLevel, string> = {
 };
 
 const SERVICE_BUILDING_LABELS: Record<string, string> = {
+  residential_l1: '住宅 1 级',
+  residential_l2: '住宅 2 级',
+  residential_l3: '住宅 3 级',
+  commercial_l1: '商业建筑',
+  industrial_l1: '工业建筑',
   community_park: '社区公园',
   community_clinic: '社区诊所',
   community_school: '社区学校',
@@ -343,12 +348,14 @@ export class HUD {
   }
 
   private residentialLevelLabel(tile: Tile): string {
-    return this.residentialLevel(tile) + '级';
+    const level = this.residentialLevel(tile);
+    return level > 0 ? level + '级' : '待开发';
   }
 
   private residentialLevel(tile: Tile): number {
+    if (tile.buildingId === 'residential_l1') return 1;
     const match = /^residential_l([2-3])$/.exec(tile.buildingId);
-    return match ? Number(match[1]) : 1;
+    return match ? Number(match[1]) : 0;
   }
 
   private selectedResidentialUpgradeAction(): CityUnlockActionId {

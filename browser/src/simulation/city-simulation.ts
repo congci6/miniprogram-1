@@ -21,9 +21,11 @@ interface GridStats {
   upgradedRoads: number;
   roadCapacity: number;
   zonedTiles: number;
+  developedZoneTiles: number;
   housingCapacity: number;
   jobs: number;
   pollution: number;
+  plannedResidentialTiles: number;
   industrialTiles: number;
   residentialTiles: number;
   upgradedResidentialTiles: number;
@@ -193,7 +195,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     description: '规划 2 个住宅地块，打开人口增长',
     rewardCash: 260,
     rewardExperience: 35,
-    isMet: (_simulation, stats) => stats.residentialTiles >= 2,
+    isMet: (_simulation, stats) => stats.plannedResidentialTiles >= 2,
   },
   {
     id: 'start-factory',
@@ -329,17 +331,26 @@ export class CitySimulation {
     };
   }
 
-  tick(deltaSeconds: number): void {
+  tick(deltaSeconds: number): boolean {
+    let changed = false;
     this.dayAccumulator += deltaSeconds;
     while (this.dayAccumulator >= 1) {
       this.dayAccumulator -= 1;
       this.metrics.day++;
       this.processProductionDay();
       this.computeMetrics();
+      if (this.processZoneDevelopment()) {
+        changed = true;
+        this.computeMetrics();
+      }
       this.processPopulation();
       this.processEconomy();
-      if (this.evaluateObjectives().length > 0) this.computeMetrics();
+      if (this.evaluateObjectives().length > 0) {
+        changed = true;
+        this.computeMetrics();
+      }
     }
+    return changed;
   }
 
   applyTool(x: number, y: number, tool: PlanningTool): PlanningActionResult {
@@ -434,6 +445,7 @@ export class CitySimulation {
     if (!tile.roadId && !this.hasAdjacentRoad(x, y)) return { changed: false, message: '住宅升级需要临近道路' };
 
     const currentLevel = this.getResidentialLevel(tile);
+    if (currentLevel <= 0) return { changed: false, message: '住宅区还未自然开发，先等待接路入住' };
     if (currentLevel >= MAX_RESIDENTIAL_LEVEL) return { changed: false, message: '住宅已达到当前最高等级' };
 
     const nextLevel = currentLevel + 1;
@@ -481,8 +493,9 @@ export class CitySimulation {
 
   getResidentialLevel(tile: { zone: ZoneType; buildingId: string }): number {
     if (tile.zone !== ZoneType.Residential) return 0;
+    if (tile.buildingId === 'residential_l1') return 1;
     const match = /^residential_l([2-3])$/.exec(tile.buildingId);
-    return match ? Number(match[1]) : 1;
+    return match ? Number(match[1]) : 0;
   }
 
   getServiceBuildingLabel(buildingId: string): string {
@@ -667,6 +680,52 @@ export class CitySimulation {
     }
   }
 
+  private processZoneDevelopment(): boolean {
+    const demandOrder = [
+      {
+        zone: ZoneType.Residential,
+        demand: this.metrics.residentialDemand,
+        minDemand: 45,
+        buildingId: 'residential_l1',
+      },
+      {
+        zone: ZoneType.Commercial,
+        demand: this.metrics.commercialDemand,
+        minDemand: 50,
+        buildingId: 'commercial_l1',
+      },
+      {
+        zone: ZoneType.Industrial,
+        demand: this.metrics.industrialDemand,
+        minDemand: 50,
+        buildingId: 'industrial_l1',
+      },
+    ].sort((a, b) => b.demand - a.demand);
+
+    for (const entry of demandOrder) {
+      if (entry.demand < entry.minDemand) continue;
+      const tile = this.findVacantDevelopableZone(entry.zone);
+      if (!tile) continue;
+      this.grid.setBuilding(tile.x, tile.y, entry.buildingId);
+      return true;
+    }
+
+    return false;
+  }
+
+  private findVacantDevelopableZone(zone: ZoneType): { x: number; y: number } | null {
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const tile = this.grid.getTile(x, y);
+        if (!tile) continue;
+        if (tile.zone !== zone || tile.buildingId || tile.roadId) continue;
+        if (!this.hasAdjacentRoad(x, y)) continue;
+        return { x, y };
+      }
+    }
+    return null;
+  }
+
   private placeServiceBuilding(x: number, y: number, serviceBuildingId: ServiceBuildingId): PlanningActionResult {
     const tile = this.grid.getTile(x, y);
     if (!tile) return { changed: false, message: '地块不在地图内' };
@@ -749,7 +808,7 @@ export class CitySimulation {
         return stats.roads > 0 ? '道路已接通，继续规划住宅。' : '选道路工具，在空地铺第一段路。';
       case 'first-neighborhood':
         if (stats.roads === 0) return '先修道路，再沿路规划住宅。';
-        return `再规划 ${Math.max(0, 2 - stats.residentialTiles)} 块住宅地。`;
+        return `再规划 ${Math.max(0, 2 - stats.plannedResidentialTiles)} 块住宅地。`;
       case 'start-factory':
         if (this.getStorageUsed() >= STORAGE_CAPACITY) return '仓库已满，先交付订单或升级住宅。';
         return '点右侧木材按钮，启动第一单生产。';
@@ -852,7 +911,7 @@ export class CitySimulation {
   private computeMetrics(): void {
     const stats = this.calculateGridStats();
     const roadCoverage = stats.zonedTiles === 0 ? 0 : Math.min(100, (stats.roadCapacity / stats.zonedTiles) * 80);
-    const congestion = stats.zonedTiles === 0 ? 0 : Math.max(0, Math.min(100, stats.zonedTiles * 5 - stats.roadCapacity * 8));
+    const congestion = stats.developedZoneTiles === 0 ? 0 : Math.max(0, Math.min(100, stats.developedZoneTiles * 5 - stats.roadCapacity * 8));
     const pollution = Math.max(0, Math.min(100, stats.pollution));
     const parkCoverage = stats.residentialTiles === 0 ? 0 : Math.min(100, (stats.parkCoveredResidentialTiles / stats.residentialTiles) * 100);
     const healthCoverage = stats.residentialTiles === 0 ? 0 : Math.min(100, (stats.healthCoveredResidentialTiles / stats.residentialTiles) * 100);
@@ -868,7 +927,7 @@ export class CitySimulation {
     const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure);
 
     this.metrics.housingCapacity = stats.housingCapacity;
-    this.metrics.buildingCount = stats.zonedTiles + stats.roads + stats.serviceBuildings;
+    this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
     this.metrics.roadCoverage = roadCoverage;
     this.metrics.congestion = congestion;
     this.metrics.pollution = pollution;
@@ -934,9 +993,11 @@ export class CitySimulation {
       upgradedRoads: 0,
       roadCapacity: 0,
       zonedTiles: 0,
+      developedZoneTiles: 0,
       housingCapacity: 0,
       jobs: 0,
       pollution: 0,
+      plannedResidentialTiles: 0,
       industrialTiles: 0,
       residentialTiles: 0,
       upgradedResidentialTiles: 0,
@@ -966,17 +1027,21 @@ export class CitySimulation {
         const zoneStats = ZONE_STATS[tile.zone];
         if (zoneStats) {
           stats.zonedTiles++;
-          stats.housingCapacity += tile.zone === ZoneType.Residential
-            ? RESIDENTIAL_CAPACITY_BY_LEVEL[this.getResidentialLevel(tile)]
-            : zoneStats.housing;
-          stats.jobs += zoneStats.jobs;
+          if (tile.zone === ZoneType.Residential) stats.plannedResidentialTiles++;
+          if (!tile.buildingId) continue;
+
+          stats.developedZoneTiles++;
           stats.pollution += zoneStats.pollution;
-          if (tile.zone === ZoneType.Industrial) stats.industrialTiles++;
           if (tile.zone === ZoneType.Residential) {
+            stats.housingCapacity += RESIDENTIAL_CAPACITY_BY_LEVEL[this.getResidentialLevel(tile)] ?? 0;
             stats.residentialTiles++;
             residentialTiles.push({ x, y });
             if (this.getResidentialLevel(tile) > 1) stats.upgradedResidentialTiles++;
+          } else {
+            stats.housingCapacity += zoneStats.housing;
+            stats.jobs += zoneStats.jobs;
           }
+          if (tile.zone === ZoneType.Industrial) stats.industrialTiles++;
         }
       }
     }
