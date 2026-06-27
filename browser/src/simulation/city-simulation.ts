@@ -343,11 +343,13 @@ export class CitySimulation {
   applyTool(x: number, y: number, tool: PlanningTool): PlanningActionResult {
     const tile = this.grid.getTile(x, y);
     if (!tile) return { changed: false, message: '地块不在地图内' };
-    if (tile.terrain === TerrainType.Water) return { changed: false, message: '水域暂时不能规划' };
 
     if (tool === 'inspect') {
       return { changed: false, message: `查看地块 (${x}, ${y})` };
     }
+
+    if (tile.terrain === TerrainType.Water) return { changed: false, message: '水域暂时不能规划' };
+    if (tile.terrain === TerrainType.Hill) return { changed: false, message: '丘陵暂时不能规划' };
 
     if (tool === 'road') {
       if (tile.roadId) return { changed: false, message: '这里已经有道路' };
@@ -612,6 +614,7 @@ export class CitySimulation {
     }
 
     for (const tile of snapshot.tiles) {
+      this.grid.setTerrain(tile.x, tile.y, TerrainType.Plain);
       this.grid.setZone(tile.x, tile.y, tile.zone);
       if (tile.roadId) this.grid.setRoad(tile.x, tile.y, tile.roadId);
       if (tile.buildingId) this.grid.setBuilding(tile.x, tile.y, tile.buildingId);

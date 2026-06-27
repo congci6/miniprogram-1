@@ -544,6 +544,7 @@ class WeChatCityGame {
 
   private colorForTile(tile: Tile): string {
     if (tile.terrain === TerrainType.Water) return '#2677c9';
+    if (tile.terrain === TerrainType.Hill) return '#7a8651';
     switch (tile.zone) {
       case ZoneType.Residential: return '#6ec35b';
       case ZoneType.Commercial: return '#4c8df2';

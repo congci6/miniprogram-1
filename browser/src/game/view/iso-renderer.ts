@@ -106,6 +106,7 @@ export class IsometricRenderer {
 
   private getColor(zone: ZoneType, terrain: TerrainType): number {
     if (terrain === TerrainType.Water) return 0x2277cc;
+    if (terrain === TerrainType.Hill) return 0x7a8651;
     switch (zone) {
       case ZoneType.Residential: return 0x77cc55;
       case ZoneType.Commercial: return 0x4488ff;
