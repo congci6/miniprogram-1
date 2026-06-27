@@ -344,6 +344,7 @@ export class CitySimulation {
       rentPressure: 0, housingCapacity: 0, buildingCount: 0,
       unlockedBuildingIds: ['community_park'],
       alerts: [],
+      alertDigest: '城市运行平稳',
       recentEvents: [],
     };
   }
@@ -605,6 +606,7 @@ export class CitySimulation {
       metrics: {
         ...this.metrics,
         alerts: [...this.metrics.alerts],
+        alertDigest: this.metrics.alertDigest,
         recentEvents: [...this.metrics.recentEvents],
         unlockedBuildingIds: [...this.metrics.unlockedBuildingIds],
       },
@@ -1001,6 +1003,7 @@ export class CitySimulation {
     this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 - pollution * 0.2)));
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
+    this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
   }
 
   private calculateDemand(
@@ -1190,6 +1193,27 @@ export class CitySimulation {
     ].sort((a, b) => b.value - a.value)[0];
     if (topDemand.value >= 75) alerts.push(`${topDemand.label}需求旺盛`);
     return alerts;
+  }
+
+  private createAlertDigest(alerts: string[]): string {
+    if (alerts.length === 0) return '城市运行平稳';
+    const ranked = [...alerts].sort((a, b) => this.alertPriority(b) - this.alertPriority(a));
+    const visible = ranked.slice(0, 2);
+    const hiddenCount = ranked.length - visible.length;
+    return hiddenCount > 0 ? `${visible.join('、')} +${hiddenCount}` : visible.join('、');
+  }
+
+  private alertPriority(alert: string): number {
+    if (alert.includes('现金')) return 100;
+    if (alert.includes('污染')) return 88;
+    if (alert.includes('道路容量') || alert.includes('拥堵')) return 82;
+    if (alert.includes('公共服务')) return 78;
+    if (alert.includes('仓库')) return 72;
+    if (alert.includes('就业')) return 64;
+    if (alert.includes('道路覆盖')) return 58;
+    if (alert.includes('需要规划住宅')) return 54;
+    if (alert.includes('需求旺盛')) return 46;
+    return 10;
   }
 
   private isResidentialCoveredBy(

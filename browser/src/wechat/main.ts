@@ -526,7 +526,7 @@ class WeChatCityGame {
         ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile) || '待开发'}`
         : `订单交付: ${this.sim.completedOrders}`,
       this.compactText(`事件: ${m.recentEvents[0] ?? '暂无'}`, 22),
-      m.alerts.length ? `提醒: ${m.alerts.slice(0, 2).join('、')}` : '提醒: 城市运行平稳',
+      this.compactText(`提醒: ${m.alertDigest}`, 28),
     ];
 
     this.ctx.fillStyle = '#dbe6df';

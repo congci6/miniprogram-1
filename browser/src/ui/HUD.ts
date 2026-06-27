@@ -236,7 +236,7 @@ export class HUD {
       '服务覆盖: 园' + Math.round(metrics.parkCoverage) + '% / 医' + Math.round(metrics.healthCoverage) + '% / 学' + Math.round(metrics.educationCoverage) + '%<br>' +
       '污染: ' + Math.round(metrics.pollution) + ' / 拥堵: ' + Math.round(metrics.congestion) +
       tileText +
-      (metrics.alerts.length ? '<br>提醒: ' + metrics.alerts.join('、') : '') +
+      '<br>提醒: ' + metrics.alertDigest +
       recentEventsText;
   }
 

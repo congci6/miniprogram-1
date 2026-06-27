@@ -81,6 +81,6 @@ export interface CityMetrics {
   roadCoverage: number; serviceGapPressure: number;
   landValue: number; rentPressure: number;
   housingCapacity: number; buildingCount: number;
-  unlockedBuildingIds: string[]; alerts: string[];
+  unlockedBuildingIds: string[]; alerts: string[]; alertDigest: string;
   recentEvents: string[];
 }
