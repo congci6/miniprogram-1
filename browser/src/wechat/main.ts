@@ -251,6 +251,7 @@ class WeChatCityGame {
         if (!tile) continue;
         const pos = this.tileToWorld(x, y);
         this.drawDiamond(pos.x, pos.y, this.colorForTile(tile), '#243b2c', 0.94);
+        if (!tile.roadId) this.drawZoneMarker(tile, pos.x, pos.y);
         if (tile.roadId) this.drawRoad(tile.roadId, pos.x, pos.y);
         this.drawServiceMarker(tile, pos.x, pos.y);
       }
@@ -304,6 +305,67 @@ class WeChatCityGame {
     this.ctx.strokeStyle = 'rgba(255,255,255,0.72)';
     this.ctx.lineWidth = 2;
     this.ctx.stroke();
+  }
+
+  private drawZoneMarker(tile: Tile, x: number, y: number): void {
+    switch (tile.zone) {
+      case ZoneType.Residential:
+        this.drawResidentialMarker(tile.buildingId, x, y);
+        return;
+      case ZoneType.Commercial:
+        this.drawCommercialMarker(x, y);
+        return;
+      case ZoneType.Industrial:
+        this.drawIndustrialMarker(x, y);
+        return;
+      default:
+    }
+  }
+
+  private drawResidentialMarker(buildingId: string, x: number, y: number): void {
+    const level = this.residentialLevelFromBuilding(buildingId);
+    const width = 8 + level * 2;
+    const height = 6 + level * 2;
+    this.ctx.fillStyle = '#f3e2bd';
+    this.ctx.fillRect(x - width / 2, y - height - 2, width, height);
+    this.ctx.beginPath();
+    this.ctx.moveTo(x - width / 2 - 2, y - height - 2);
+    this.ctx.lineTo(x + width / 2 + 2, y - height - 2);
+    this.ctx.lineTo(x, y - height - 8);
+    this.ctx.closePath();
+    this.ctx.fillStyle = level >= 3 ? '#b9473f' : '#c85a44';
+    this.ctx.fill();
+    if (level >= 2) {
+      this.ctx.fillStyle = '#8fc7ff';
+      this.ctx.fillRect(x - 3, y - height + 1, 2, 2);
+      this.ctx.fillRect(x + 2, y - height + 1, 2, 2);
+    }
+  }
+
+  private drawCommercialMarker(x: number, y: number): void {
+    this.ctx.fillStyle = '#d8e7ff';
+    this.ctx.fillRect(x - 9, y - 18, 8, 16);
+    this.ctx.fillStyle = '#b5d3ff';
+    this.ctx.fillRect(x + 1, y - 14, 8, 12);
+    this.ctx.fillStyle = '#3f6fa9';
+    this.ctx.fillRect(x - 7, y - 14, 4, 2);
+    this.ctx.fillRect(x + 3, y - 10, 4, 2);
+  }
+
+  private drawIndustrialMarker(x: number, y: number): void {
+    this.ctx.fillStyle = '#d89b62';
+    this.ctx.fillRect(x - 10, y - 11, 17, 9);
+    this.ctx.beginPath();
+    this.ctx.moveTo(x - 10, y - 11);
+    this.ctx.lineTo(x - 4, y - 17);
+    this.ctx.lineTo(x + 1, y - 11);
+    this.ctx.lineTo(x + 6, y - 15);
+    this.ctx.lineTo(x + 7, y - 11);
+    this.ctx.closePath();
+    this.ctx.fillStyle = '#b86f45';
+    this.ctx.fill();
+    this.ctx.fillStyle = '#5d6268';
+    this.ctx.fillRect(x + 8, y - 19, 4, 17);
   }
 
   private drawTopBar(): void {
@@ -540,6 +602,11 @@ class WeChatCityGame {
       this.vibrate('light');
       this.save();
     }
+  }
+
+  private residentialLevelFromBuilding(buildingId: string): number {
+    const match = /^residential_l([2-3])$/.exec(buildingId);
+    return match ? Number(match[1]) : 1;
   }
 
   private colorForTile(tile: Tile): string {

@@ -1,6 +1,7 @@
 import * as Phaser from 'phaser';
 import { CitySimulation } from '@/simulation/city-simulation';
 import { ServiceBuildingId, ZoneType, TerrainType } from '@/types/index';
+import type { Tile } from '@/simulation/grid';
 
 const SERVICE_MARKER_COLORS: Record<ServiceBuildingId, number> = {
   community_park: 0x8fe06f,
@@ -74,6 +75,7 @@ export class IsometricRenderer {
     this.gfx.lineStyle(1, 0x333333, 0.25);
     this.gfx.strokeRect(wx - hw, wy - hh, this.TILE_W, this.TILE_H);
 
+    if (!tile.roadId) this.drawZoneMarker(tile, wx, wy);
     if (tile.roadId) this.drawRoad(tile.roadId, wx, wy, hw, hh);
 
     this.drawServiceMarker(tile.buildingId, wx, wy);
@@ -91,6 +93,61 @@ export class IsometricRenderer {
     this.gfx.fillCircle(wx, wy - 8, 7);
     this.gfx.lineStyle(2, 0xffffff, 0.7);
     this.gfx.strokeCircle(wx, wy - 8, 7);
+  }
+
+  private drawZoneMarker(tile: Tile, wx: number, wy: number): void {
+    switch (tile.zone) {
+      case ZoneType.Residential:
+        this.drawResidentialMarker(tile.buildingId, wx, wy);
+        return;
+      case ZoneType.Commercial:
+        this.drawCommercialMarker(wx, wy);
+        return;
+      case ZoneType.Industrial:
+        this.drawIndustrialMarker(wx, wy);
+        return;
+      default:
+    }
+  }
+
+  private drawResidentialMarker(buildingId: string, wx: number, wy: number): void {
+    const level = this.getResidentialLevel(buildingId);
+    const width = 10 + level * 2;
+    const height = 7 + level * 2;
+    this.gfx.fillStyle(0xf3e2bd, 0.95);
+    this.gfx.fillRect(wx - width / 2, wy - height - 2, width, height);
+    this.gfx.fillStyle(level >= 3 ? 0xb9473f : 0xc85a44, 0.95);
+    this.gfx.fillTriangle(wx - width / 2 - 2, wy - height - 2, wx + width / 2 + 2, wy - height - 2, wx, wy - height - 9);
+    if (level >= 2) {
+      this.gfx.fillStyle(0x8fc7ff, 0.8);
+      this.gfx.fillRect(wx - 3, wy - height + 1, 2, 2);
+      this.gfx.fillRect(wx + 2, wy - height + 1, 2, 2);
+    }
+  }
+
+  private drawCommercialMarker(wx: number, wy: number): void {
+    this.gfx.fillStyle(0xd8e7ff, 0.92);
+    this.gfx.fillRect(wx - 10, wy - 19, 8, 17);
+    this.gfx.fillStyle(0xb5d3ff, 0.92);
+    this.gfx.fillRect(wx, wy - 15, 9, 13);
+    this.gfx.fillStyle(0x3f6fa9, 0.7);
+    this.gfx.fillRect(wx - 8, wy - 15, 4, 2);
+    this.gfx.fillRect(wx + 2, wy - 11, 5, 2);
+  }
+
+  private drawIndustrialMarker(wx: number, wy: number): void {
+    this.gfx.fillStyle(0xd89b62, 0.94);
+    this.gfx.fillRect(wx - 11, wy - 11, 18, 9);
+    this.gfx.fillStyle(0xb86f45, 0.95);
+    this.gfx.fillTriangle(wx - 11, wy - 11, wx - 4, wy - 18, wx + 2, wy - 11);
+    this.gfx.fillTriangle(wx - 1, wy - 11, wx + 6, wy - 16, wx + 7, wy - 11);
+    this.gfx.fillStyle(0x5d6268, 0.95);
+    this.gfx.fillRect(wx + 8, wy - 20, 4, 18);
+  }
+
+  private getResidentialLevel(buildingId: string): number {
+    const match = /^residential_l([2-3])$/.exec(buildingId);
+    return match ? Number(match[1]) : 1;
   }
 
   private drawRoad(roadId: string, wx: number, wy: number, hw: number, hh: number): void {
