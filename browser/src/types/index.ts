@@ -45,7 +45,7 @@ export interface CityOrder {
 }
 export interface CityObjective {
   id: string; title: string; description: string;
-  rewardCash: number; rewardExperience: number; completed: boolean;
+  advice: string; rewardCash: number; rewardExperience: number; completed: boolean;
 }
 export type CityUnlockActionId = 'roadUpgrade' | 'residentialLevel2' | 'residentialLevel3';
 export interface CityUnlockEntry {

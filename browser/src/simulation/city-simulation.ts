@@ -490,10 +490,12 @@ export class CitySimulation {
   }
 
   getObjectives(): CityObjective[] {
+    const stats = this.calculateGridStats();
     return OBJECTIVE_DEFINITIONS.map((objective) => ({
       id: objective.id,
       title: objective.title,
       description: objective.description,
+      advice: this.getObjectiveAdvice(objective.id, stats),
       rewardCash: objective.rewardCash,
       rewardExperience: objective.rewardExperience,
       completed: this.completedObjectiveIds.has(objective.id),
@@ -721,6 +723,67 @@ export class CitySimulation {
       rewards.push(`${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}`);
     }
     return rewards;
+  }
+
+  private getObjectiveAdvice(objectiveId: string, stats: GridStats): string {
+    switch (objectiveId) {
+      case 'first-road':
+        return stats.roads > 0 ? '道路已接通，继续规划住宅。' : '选道路工具，在空地铺第一段路。';
+      case 'first-neighborhood':
+        if (stats.roads === 0) return '先修道路，再沿路规划住宅。';
+        return `再规划 ${Math.max(0, 2 - stats.residentialTiles)} 块住宅地。`;
+      case 'start-factory':
+        if (this.getStorageUsed() >= STORAGE_CAPACITY) return '仓库已满，先交付订单或升级住宅。';
+        return '点右侧木材按钮，启动第一单生产。';
+      case 'first-arterial':
+        if (!this.isLevelUnlocked(ROAD_UPGRADE_UNLOCK_LEVEL)) return '先完成前置目标升到 Lv2。';
+        if (stats.roads === 0) return '先铺道路，再升级主干道。';
+        return '选中普通道路，点升道路。';
+      case 'first-delivery':
+        return this.getOrderAdvice();
+      case 'upgrade-home':
+        if (!this.isLevelUnlocked(RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[2])) return '先升到 Lv2 解锁住宅升级。';
+        if (stats.residentialTiles === 0) return '先规划住宅并接近道路。';
+        return this.hasMaterials(RESIDENTIAL_UPGRADE_COSTS[2])
+          ? '选中住宅，点升级住宅。'
+          : `准备${this.formatMissingMaterials(RESIDENTIAL_UPGRADE_COSTS[2])}。`;
+      case 'first-service':
+        if (stats.roads === 0) return '先铺道路，服务建筑要临路。';
+        return '选公园工具，建在道路旁。';
+      case 'balanced-services':
+        return this.getServiceCoverageAdvice();
+      default:
+        return '继续扩建城市并优化路网。';
+    }
+  }
+
+  private getOrderAdvice(): string {
+    const order = this.orders[0];
+    if (!order) return '等待新的城市订单刷新。';
+    if (this.hasMaterials(order.required)) return '材料已齐，点交付订单。';
+    return `补齐${this.formatMissingMaterials(order.required)}后交付。`;
+  }
+
+  private getServiceCoverageAdvice(): string {
+    if (!this.isLevelUnlocked(3)) return '先升到 Lv3 解锁学校。';
+    const gaps = [
+      { label: '公园', value: this.metrics.parkCoverage, action: '补公园' },
+      { label: '医疗', value: this.metrics.healthCoverage, action: '补诊所' },
+      { label: '教育', value: this.metrics.educationCoverage, action: '补学校' },
+    ].sort((a, b) => a.value - b.value);
+    const focus = gaps[0];
+    if (focus.value >= 50) return '三类服务已接近达标，等待目标结算。';
+    return `${focus.action}，把${focus.label}覆盖提到 50%。`;
+  }
+
+  private formatMissingMaterials(cost: MaterialCost): string {
+    return (Object.entries(cost) as Array<[MaterialId, number]>)
+      .map(([materialId, required]) => {
+        const missing = Math.max(0, required - this.materials[materialId]);
+        return missing > 0 ? `${MATERIAL_LABELS[materialId]}x${missing}` : '';
+      })
+      .filter(Boolean)
+      .join('、') || '所需材料';
   }
 
   private grantExperience(amount: number): void {

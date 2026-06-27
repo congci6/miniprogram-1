@@ -361,7 +361,7 @@ class WeChatCityGame {
     const x = this.width - 262;
     const y = 54;
     const width = 250;
-    const height = 222;
+    const height = 242;
     this.layoutActionButtons();
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, height, 6);
@@ -379,12 +379,13 @@ class WeChatCityGame {
       firstOrder ? `需求: ${this.formatCost(firstOrder.required)}` : '需求: 无',
       objective ? `目标: ${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}` : '目标: 阶段目标已完成',
       objective ? objective.description : '继续扩建城市并优化路网',
+      objective ? `建议: ${objective.advice}` : '建议: 继续优化服务和路网',
     ];
 
     this.ctx.fillStyle = '#dbe6df';
     this.ctx.font = '12px sans-serif';
     this.ctx.textBaseline = 'top';
-    lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 18));
+    lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 17));
 
     this.actionButtons.forEach((button) => {
       const locked = Boolean(button.lockedMessage);
@@ -451,7 +452,7 @@ class WeChatCityGame {
   private layoutActionButtons(): void {
     this.actionButtons.length = 0;
     const x = this.width - 250;
-    const y = 176;
+    const y = 190;
     const width = 48;
     const gap = 6;
     const unlockState = this.sim.getUnlockState();

@@ -290,6 +290,7 @@ export class HUD {
     return '<div style="margin-top:5px;color:' + color + '">' +
       state + ' ' + objective.title + '<br>' +
       '<span style="color:#aebbb4">' + objective.description + ' +$' + objective.rewardCash + ' / 经验+' + objective.rewardExperience + '</span>' +
+      (objective.completed ? '' : '<br><span style="color:#d8e6ba">建议: ' + objective.advice + '</span>') +
       '</div>';
   }
 
