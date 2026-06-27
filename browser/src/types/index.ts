@@ -78,6 +78,8 @@ export interface CityMetrics {
   budgetStress: number; budgetFocus: string; budgetDriver: string; budgetAction: string;
   districtPriorityScore: number; districtPriorityFocus: string; districtPriorityDriver: string; districtPriorityAction: string;
   housingAffordabilityScore: number; housingAffordabilityFocus: string; housingAffordabilityDriver: string; housingAffordabilityAction: string;
+  buildingUpgradeReadinessScore: number; buildingUpgradeReadyCount: number; buildingUpgradeBlockedCount: number;
+  buildingUpgradeReadinessFocus: string; buildingUpgradeReadinessDriver: string; buildingUpgradeReadinessAction: string;
   serviceGapAdvisorScore: number; serviceGapAdvisorFocus: string; serviceGapAdvisorDriver: string; serviceGapAdvisorAction: string;
   roadHierarchyPressure: number; roadHierarchyFocus: string; roadHierarchyDriver: string; roadHierarchyAction: string;
   commuteCorridorScore: number; commuteCorridorFocus: string; commuteCorridorDriver: string; commuteCorridorAction: string;

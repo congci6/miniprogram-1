@@ -84,6 +84,15 @@ interface HousingAffordabilityAdvisor {
   action: string;
 }
 
+interface BuildingUpgradeReadinessAdvisor {
+  score: number;
+  readyCount: number;
+  blockedCount: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 interface ServiceGapAdvisor {
   score: number;
   focus: string;
@@ -413,6 +422,12 @@ export class CitySimulation {
       housingAffordabilityFocus: '起步',
       housingAffordabilityDriver: '等待住宅片区成形',
       housingAffordabilityAction: '先接路规划住宅',
+      buildingUpgradeReadinessScore: 0,
+      buildingUpgradeReadyCount: 0,
+      buildingUpgradeBlockedCount: 0,
+      buildingUpgradeReadinessFocus: '起步',
+      buildingUpgradeReadinessDriver: '等待可升级住宅',
+      buildingUpgradeReadinessAction: '先让住宅自然开发',
       serviceGapAdvisorScore: 0,
       serviceGapAdvisorFocus: '均衡',
       serviceGapAdvisorDriver: '暂无住宅服务压力',
@@ -1069,6 +1084,7 @@ export class CitySimulation {
     const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
     const commuteAdvisor = this.createCommuteCorridorAdvisor(stats, roadCoverage, congestion, demand, roadAdvisor);
     const housingAdvisor = this.createHousingAffordabilityAdvisor(stats, demand, rentPressure, serviceCoverage, roadCoverage, landValue, taxPressure, commuteAdvisor);
+    const upgradeAdvisor = this.createBuildingUpgradeReadinessAdvisor(stats);
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
@@ -1098,7 +1114,7 @@ export class CitySimulation {
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
     const forecast = this.createRiskForecast(stats, budget.net);
     const budgetAdvisor = this.createBudgetBreakdownAdvisor(budget);
-    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor);
+    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
@@ -1115,6 +1131,12 @@ export class CitySimulation {
     this.metrics.housingAffordabilityFocus = housingAdvisor.focus;
     this.metrics.housingAffordabilityDriver = housingAdvisor.driver;
     this.metrics.housingAffordabilityAction = housingAdvisor.action;
+    this.metrics.buildingUpgradeReadinessScore = upgradeAdvisor.score;
+    this.metrics.buildingUpgradeReadyCount = upgradeAdvisor.readyCount;
+    this.metrics.buildingUpgradeBlockedCount = upgradeAdvisor.blockedCount;
+    this.metrics.buildingUpgradeReadinessFocus = upgradeAdvisor.focus;
+    this.metrics.buildingUpgradeReadinessDriver = upgradeAdvisor.driver;
+    this.metrics.buildingUpgradeReadinessAction = upgradeAdvisor.action;
     this.metrics.serviceGapAdvisorScore = serviceAdvisor.score;
     this.metrics.serviceGapAdvisorFocus = serviceAdvisor.focus;
     this.metrics.serviceGapAdvisorDriver = serviceAdvisor.driver;
@@ -1397,6 +1419,7 @@ export class CitySimulation {
     roadAdvisor: RoadHierarchyAdvisor,
     commuteAdvisor: CommuteCorridorAdvisor,
     housingAdvisor: HousingAffordabilityAdvisor,
+    upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
   ): DistrictPriorityAdvisor {
     const housingPressure = stats.housingCapacity === 0
       ? stats.roads > 0 || stats.zonedTiles > 0 ? 72 : 36
@@ -1429,6 +1452,12 @@ export class CitySimulation {
         focus: '住房',
         driver: housingAdvisor.driver,
         action: housingAdvisor.action,
+      },
+      {
+        score: upgradeAdvisor.score,
+        focus: '升级',
+        driver: upgradeAdvisor.driver,
+        action: upgradeAdvisor.action,
       },
       {
         score: stats.residentialTiles >= 2 ? serviceAdvisor.score : 0,
@@ -1476,6 +1505,113 @@ export class CitySimulation {
       focus: candidates.focus,
       driver: candidates.driver,
       action: candidates.action,
+    };
+  }
+
+  private createBuildingUpgradeReadinessAdvisor(stats: GridStats): BuildingUpgradeReadinessAdvisor {
+    let readyCount = 0;
+    let blockedCount = 0;
+    let maxedCount = 0;
+    let undevelopedCount = 0;
+    let accessBlocked = 0;
+    let unlockBlocked = 0;
+    let materialBlocked = 0;
+    let firstMissingMaterials = '';
+    let firstLockedLevel = 0;
+
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const tile = this.grid.getTile(x, y);
+        if (!tile || tile.zone !== ZoneType.Residential) continue;
+
+        const currentLevel = this.getResidentialLevel(tile);
+        if (currentLevel <= 0) {
+          undevelopedCount++;
+          continue;
+        }
+        if (currentLevel >= MAX_RESIDENTIAL_LEVEL) {
+          maxedCount++;
+          continue;
+        }
+
+        const nextLevel = currentLevel + 1;
+        const unlockLevel = RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[nextLevel] ?? 1;
+        const cost = RESIDENTIAL_UPGRADE_COSTS[nextLevel];
+        const hasRoadAccess = Boolean(tile.roadId) || this.hasAdjacentRoad(x, y);
+
+        if (!hasRoadAccess) {
+          accessBlocked++;
+          blockedCount++;
+        } else if (!this.isLevelUnlocked(unlockLevel)) {
+          unlockBlocked++;
+          blockedCount++;
+          if (firstLockedLevel === 0) firstLockedLevel = unlockLevel;
+        } else if (!this.hasMaterials(cost)) {
+          materialBlocked++;
+          blockedCount++;
+          if (!firstMissingMaterials && cost) firstMissingMaterials = this.formatMissingMaterials(cost);
+        } else {
+          readyCount++;
+        }
+      }
+    }
+
+    if (readyCount > 0) {
+      return {
+        score: Math.min(100, 68 + readyCount * 8),
+        readyCount,
+        blockedCount,
+        focus: '可升级',
+        driver: `${readyCount}处住宅材料已齐`,
+        action: '选中住宅点升级住宅',
+      };
+    }
+
+    if (blockedCount > 0) {
+      const blockers = [
+        { count: materialBlocked, focus: '材料', driver: firstMissingMaterials ? `缺${firstMissingMaterials}` : '升级材料不足', action: firstMissingMaterials ? `排产${firstMissingMaterials}` : '排产升级材料' },
+        { count: unlockBlocked, focus: '等级', driver: firstLockedLevel > 0 ? `Lv${firstLockedLevel}解锁下一次升级` : '城市等级不足', action: '完成目标提升城市等级' },
+        { count: accessBlocked, focus: '接入', driver: `${accessBlocked}处住宅缺少道路`, action: '补道路接入住宅' },
+      ].sort((a, b) => b.count - a.count)[0];
+      return {
+        score: Math.min(100, 52 + blockedCount * 8),
+        readyCount,
+        blockedCount,
+        focus: blockers.focus,
+        driver: blockers.driver,
+        action: blockers.action,
+      };
+    }
+
+    if (undevelopedCount > 0) {
+      return {
+        score: 32,
+        readyCount,
+        blockedCount,
+        focus: '等待',
+        driver: `${undevelopedCount}块住宅待自然开发`,
+        action: '保持接路并等待入住',
+      };
+    }
+
+    if (maxedCount > 0) {
+      return {
+        score: 12,
+        readyCount,
+        blockedCount,
+        focus: '满级',
+        driver: '现有住宅已达当前等级上限',
+        action: '继续扩建新住宅片区',
+      };
+    }
+
+    return {
+      score: stats.roads > 0 ? 24 : 0,
+      readyCount,
+      blockedCount,
+      focus: '起步',
+      driver: '暂无可升级住宅',
+      action: stats.roads > 0 ? '沿道路规划住宅区' : '先铺道路再规划住宅',
     };
   }
 

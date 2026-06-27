@@ -280,6 +280,11 @@ export class HUD {
       ' / ' + (this.metrics?.housingAffordabilityFocus ?? '起步') +
       ' / ' + (this.metrics?.housingAffordabilityDriver ?? '等待住宅片区成形') +
       ' -> ' + (this.metrics?.housingAffordabilityAction ?? '先接路规划住宅') + '</span><br><br>' +
+      '<span style="color:#f2c7d4">升级: ' + (this.metrics?.buildingUpgradeReadinessScore ?? 0) +
+      ' / 候' + (this.metrics?.buildingUpgradeReadyCount ?? 0) +
+      ' 阻' + (this.metrics?.buildingUpgradeBlockedCount ?? 0) +
+      ' / ' + (this.metrics?.buildingUpgradeReadinessDriver ?? '等待可升级住宅') +
+      ' -> ' + (this.metrics?.buildingUpgradeReadinessAction ?? '先让住宅自然开发') + '</span><br><br>' +
       '<span style="color:#d6c7ff">服务短板: ' + (this.metrics?.serviceGapAdvisorFocus ?? '均衡') +
       ' ' + (this.metrics?.serviceGapAdvisorScore ?? 0) +
       ' / ' + (this.metrics?.serviceGapAdvisorDriver ?? '暂无住宅服务压力') +
