@@ -52,6 +52,12 @@ export interface CityTileInspection {
   title: string; terrain: string; zone: string; road: string; building: string;
   overlayLabel: string; overlayValue: string; diagnosis: string; legend: string;
 }
+export interface CityPolicyImpactPreview {
+  policy: CityPolicy; label: string; nextEnabled: boolean; summary: string; deltas: string[];
+}
+export interface CityPolicyState {
+  policy: CityPolicy; label: string; shortLabel: string; enabled: boolean; preview: CityPolicyImpactPreview;
+}
 export type CityUnlockActionId = 'roadUpgrade' | 'residentialLevel2' | 'residentialLevel3';
 export interface CityUnlockEntry {
   label: string; unlockLevel: number; unlocked: boolean;
@@ -95,6 +101,8 @@ export interface CityMetrics {
   safetyCoverage: number; securityCoverage: number;
   parkCoverage: number; transitCoverage: number;
   roadCoverage: number; serviceGapPressure: number;
+  parkingPressure: number; walkability: number; accidentRisk: number;
+  stormwaterResilience: number; floodRisk: number; policyBacklog: number;
   landValue: number; rentPressure: number;
   housingCapacity: number; buildingCount: number;
   unlockedBuildingIds: string[]; alerts: string[]; alertDigest: string;

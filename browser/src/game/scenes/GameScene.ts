@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { CityOfflineProgressResult, CitySimulation, CitySimulationSaveData } from '@/simulation/city-simulation';
 import { IsometricRenderer } from '@/game/view/iso-renderer';
-import { CityTaxLevel, CityTimeScale, MaterialId, PlanningTool } from '@/types/index';
+import { CityPolicy, CityPolicyImpactPreview, CityTaxLevel, CityTimeScale, MaterialId, PlanningTool } from '@/types/index';
 
 const BROWSER_SAVE_KEY = 'pocket-city-planner-browser-save';
 const MATERIAL_LABELS: Record<MaterialId, string> = {
@@ -20,6 +20,7 @@ export class GameScene extends Phaser.Scene {
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: { x: number; y: number } | null = null;
   private timeScale: CityTimeScale = 1;
+  private policyPreview: CityPolicyImpactPreview | null = null;
   private paintedThisDrag = new Set<string>();
   private isCameraPanning = false;
   private panStart: { pointerX: number; pointerY: number; scrollX: number; scrollY: number } | null = null;
@@ -64,6 +65,14 @@ export class GameScene extends Phaser.Scene {
       if (!this.isTimeScale(timeScale)) return;
       this.timeScale = timeScale;
       this.publishMetrics(timeScale === 0 ? '城市已暂停' : `模拟速度 ${timeScale}x`);
+    }) as EventListener);
+    window.addEventListener('city-policy-toggle', ((event: Event) => {
+      const policy = (event as CustomEvent<{ policy: CityPolicy }>).detail.policy;
+      if (!this.isCityPolicy(policy)) return;
+      this.policyPreview = this.sim.getPolicyImpactPreview(policy);
+      const result = this.sim.togglePolicy(policy);
+      if (result.changed) this.save();
+      this.publishMetrics(result.message);
     }) as EventListener);
     window.addEventListener('city-upgrade-selected-residential', () => {
       if (!this.selectedTile) {
@@ -198,6 +207,10 @@ export class GameScene extends Phaser.Scene {
     return value === 0 || value === 1 || value === 2;
   }
 
+  private isCityPolicy(value: unknown): value is CityPolicy {
+    return Object.values(CityPolicy).includes(value as CityPolicy);
+  }
+
   private tileFromPointer(pointer: Phaser.Input.Pointer): { x: number; y: number } | null {
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     return this.isoRender.getTileAtWorld(worldPoint.x, worldPoint.y);
@@ -216,6 +229,8 @@ export class GameScene extends Phaser.Scene {
         completedOrders: this.sim.completedOrders,
         objectives: this.sim.getObjectives(),
         unlockState: this.sim.getUnlockState(),
+        policyStates: this.sim.getPolicyStates(),
+        policyPreview: this.policyPreview,
         selectedTool: this.selectedTool,
         timeScale: this.timeScale,
         selectedInspection: this.selectedTile ? this.sim.getTileInspection(this.selectedTile.x, this.selectedTile.y) : null,

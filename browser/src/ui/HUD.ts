@@ -3,6 +3,9 @@ import {
   CityMetrics,
   CityObjective,
   CityOrder,
+  CityPolicy,
+  CityPolicyImpactPreview,
+  CityPolicyState,
   CityTileInspection,
   CityTaxLevel,
   CityTimeScale,
@@ -107,6 +110,8 @@ export class HUD {
   private selectedInspection: CityTileInspection | null = null;
   private inspectionLegend = '图例: 绿住宅 蓝商业 橙工业 黑道路 粉服务 黄选中';
   private timeScale: CityTimeScale = 1;
+  private policyStates: CityPolicyState[] = [];
+  private policyPreview: CityPolicyImpactPreview | null = null;
 
   constructor() {
     const c = document.getElementById('hud-overlay')!;
@@ -171,6 +176,8 @@ export class HUD {
       if (e.detail.message) this.selectedMessage = e.detail.message;
       if ('selectedInspection' in e.detail) this.selectedInspection = e.detail.selectedInspection ?? null;
       if ('timeScale' in e.detail && this.isTimeScale(e.detail.timeScale)) this.timeScale = e.detail.timeScale;
+      this.policyStates = e.detail.policyStates ?? this.policyStates;
+      this.policyPreview = e.detail.policyPreview ?? this.policyPreview;
       this.inspectionLegend = e.detail.inspectionLegend ?? this.inspectionLegend;
       this.materials = e.detail.materials ?? this.materials;
       this.productionQueue = e.detail.productionQueue ?? this.productionQueue;
@@ -276,6 +283,12 @@ export class HUD {
     const taxRatePercent = this.metrics?.taxRatePercent ?? 9;
     const cashRunwayDays = this.metrics?.cashRunwayDays ?? 999;
     const cashRunwayText = cashRunwayDays >= 999 ? '稳定' : cashRunwayDays + '天';
+    const policyPreviewText = this.policyPreview
+      ? '<span style="color:#b8d8ff">' + this.policyPreview.summary + ': ' + this.policyPreview.deltas.slice(0, 4).join(' / ') + '</span><br>'
+      : '<span style="color:#b8c7d9">政策预览: 点击政策查看关键指标变化</span><br>';
+    const policyButtonsText = this.policyStates.length
+      ? this.policyStates.map((policyState) => this.policyButtonHtml(policyState)).join('')
+      : '<span style="color:#8f9b95">政策加载中</span>';
 
     this.managementPanel.innerHTML =
       '<strong>时间</strong> ' + TIME_SCALE_LABELS[this.timeScale] + '<br>' +
@@ -290,6 +303,11 @@ export class HUD {
       this.taxButtonHtml(CityTaxLevel.Normal, currentTaxLevel) +
       this.taxButtonHtml(CityTaxLevel.High, currentTaxLevel) +
       '</div>' +
+      '<strong>政策</strong><br>' +
+      '<div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap">' +
+      policyButtonsText +
+      '</div>' +
+      policyPreviewText + '<br>' +
       '<span style="color:#f2d479">风险: ' + (this.metrics?.forecastRisk ?? 0) +
       ' / ' + (this.metrics?.forecastFocus ?? '稳定') +
       ' -> ' + (this.metrics?.forecastAction ?? '继续扩建并保留现金缓冲') +
@@ -381,6 +399,14 @@ export class HUD {
         }
       });
     });
+    this.managementPanel.querySelectorAll<HTMLButtonElement>('button[data-policy]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const policy = Number(button.dataset.policy);
+        if (this.isCityPolicy(policy)) {
+          window.dispatchEvent(new CustomEvent('city-policy-toggle', { detail: { policy } }));
+        }
+      });
+    });
     this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade"]')
       ?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('city-upgrade-selected-residential')));
     this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade-road"]')
@@ -406,6 +432,12 @@ export class HUD {
     const selected = timeScale === this.timeScale;
     return '<button data-time-scale="' + timeScale + '" style="' + this.actionButtonStyle(selected ? '#6ea85f' : '#263239') + '">' +
       TIME_SCALE_LABELS[timeScale] +
+      '</button>';
+  }
+
+  private policyButtonHtml(policyState: CityPolicyState): string {
+    return '<button data-policy="' + policyState.policy + '" style="' + this.actionButtonStyle(policyState.enabled ? '#6ea85f' : '#263239') + '">' +
+      policyState.shortLabel +
       '</button>';
   }
 
@@ -441,6 +473,10 @@ export class HUD {
 
   private isTimeScale(value: unknown): value is CityTimeScale {
     return value === 0 || value === 1 || value === 2;
+  }
+
+  private isCityPolicy(value: unknown): value is CityPolicy {
+    return Object.values(CityPolicy).includes(value as CityPolicy);
   }
 
   private residentialLevelLabel(tile: Tile): string {

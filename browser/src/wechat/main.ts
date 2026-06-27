@@ -1,5 +1,5 @@
 import { CityOfflineProgressResult, CitySimulation, type CitySimulationSaveData } from '@/simulation/city-simulation';
-import { CityTaxLevel, CityTimeScale, CityUnlockActionId, MaterialCost, MaterialId, PlanningTool, ServiceBuildingId, TerrainType, ZoneType } from '@/types/index';
+import { CityPolicy, CityPolicyImpactPreview, CityTimeScale, CityTaxLevel, CityUnlockActionId, MaterialCost, MaterialId, PlanningTool, ServiceBuildingId, TerrainType, ZoneType } from '@/types/index';
 import type { Tile } from '@/simulation/grid';
 
 declare const wx: WeChatRuntime | undefined;
@@ -40,7 +40,7 @@ interface ToolButton {
 }
 
 interface ActionButton {
-  kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad' | 'tax' | 'timeScale';
+  kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad' | 'tax' | 'timeScale' | 'policy';
   label: string;
   lockedMessage?: string;
   x: number;
@@ -51,6 +51,8 @@ interface ActionButton {
   orderId?: string;
   taxLevel?: CityTaxLevel;
   timeScale?: CityTimeScale;
+  policy?: CityPolicy;
+  selected?: boolean;
 }
 
 const RUNTIME_MARKER = 'NON_UNITY_WECHAT_CANVAS_RUNTIME';
@@ -109,6 +111,7 @@ class WeChatCityGame {
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: Tile | null = null;
   private timeScale: CityTimeScale = 1;
+  private policyPreview: CityPolicyImpactPreview | null = null;
   private statusText = '选择工具后点击地块开始规划';
   private lastPaintKey = '';
   private lastTime = Date.now();
@@ -518,7 +521,7 @@ class WeChatCityGame {
     const x = this.width - 262;
     const y = 54;
     const width = 250;
-    const height = 290;
+    const height = 380;
     this.layoutActionButtons();
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, height, 6);
@@ -529,11 +532,15 @@ class WeChatCityGame {
       ? this.sim.productionQueue.map((job) => `${job.label}${job.remainingDays}天`).join(' ')
       : '空闲';
     const objective = this.sim.getObjectives().find((candidate) => !candidate.completed);
+    const policyPreviewLine = this.policyPreview
+      ? this.compactText(`${this.policyPreview.summary}: ${this.policyPreview.deltas.slice(0, 3).join(' ')}`, 30)
+      : '政策: 点按钮查看影响';
     const lines = [
       `仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()}  ${this.materialLine()}`,
       `工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`,
       firstOrder ? `订单: ${firstOrder.title} +$${firstOrder.rewardCash}` : '订单: 暂无',
       firstOrder ? `需求: ${this.formatCost(firstOrder.required)}` : '需求: 无',
+      policyPreviewLine,
       objective ? `目标: ${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}` : '目标: 阶段目标已完成',
       objective ? objective.description : '继续扩建城市并优化路网',
       objective ? `建议: ${objective.advice}` : '建议: 继续优化服务和路网',
@@ -548,7 +555,8 @@ class WeChatCityGame {
       const locked = Boolean(button.lockedMessage);
       const selectedTax = button.kind === 'tax' && button.taxLevel === this.sim.metrics.taxLevel;
       const selectedTimeScale = button.kind === 'timeScale' && button.timeScale === this.timeScale;
-      const highlighted = button.kind === 'upgrade' || selectedTax || selectedTimeScale;
+      const selectedPolicy = button.kind === 'policy' && Boolean(button.selected);
+      const highlighted = button.kind === 'upgrade' || selectedTax || selectedTimeScale || selectedPolicy;
       this.ctx.fillStyle = locked ? '#30363a' : highlighted ? '#6ea85f' : '#263239';
       this.roundRect(button.x, button.y, button.width, button.height, 5);
       this.ctx.fill();
@@ -682,6 +690,21 @@ class WeChatCityGame {
         height: 28,
       });
     });
+    const policyY = taxY + 36;
+    this.sim.getPolicyStates().forEach((policyState, index) => {
+      const column = index % 3;
+      const row = Math.floor(index / 3);
+      this.actionButtons.push({
+        kind: 'policy',
+        policy: policyState.policy,
+        selected: policyState.enabled,
+        label: policyState.shortLabel,
+        x: x + column * 82,
+        y: policyY + row * 30,
+        width: 74,
+        height: 24,
+      });
+    });
   }
 
   private selectedResidentialUpgradeAction(): CityUnlockActionId {
@@ -722,7 +745,9 @@ class WeChatCityGame {
               ? this.sim.setTaxLevel(button.taxLevel)
               : button.kind === 'timeScale' && button.timeScale !== undefined
                 ? this.setTimeScale(button.timeScale)
-                : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
+                : button.kind === 'policy' && button.policy !== undefined
+                  ? this.togglePolicy(button.policy)
+                  : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
     this.statusText = result.message;
     if (result.changed) {
       this.vibrate('light');
@@ -739,6 +764,11 @@ class WeChatCityGame {
       changed: true,
       message: timeScale === 0 ? '城市已暂停' : `模拟速度 ${TIME_SCALE_LABELS[timeScale]}`,
     };
+  }
+
+  private togglePolicy(policy: CityPolicy): { changed: boolean; message: string } {
+    this.policyPreview = this.sim.getPolicyImpactPreview(policy);
+    return this.sim.togglePolicy(policy);
   }
 
   private residentialLevelFromBuilding(buildingId: string): number {
