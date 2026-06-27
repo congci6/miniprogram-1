@@ -74,6 +74,7 @@ export interface CityMetrics {
   residentialDemand: number; commercialDemand: number; industrialDemand: number;
   demandAdvice: string;
   demandFocus: string; demandDriver: string; demandAction: string; demandUrgency: number;
+  forecastRisk: number; forecastFocus: string; forecastAction: string; cashRunwayDays: number;
   congestion: number; pollution: number; crime: number;
   healthCoverage: number; educationCoverage: number;
   safetyCoverage: number; securityCoverage: number;

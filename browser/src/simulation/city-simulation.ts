@@ -46,6 +46,13 @@ interface DemandAnalysis {
   urgency: number;
 }
 
+interface RiskForecast {
+  risk: number;
+  focus: string;
+  action: string;
+  cashRunwayDays: number;
+}
+
 export interface PlanningActionResult {
   changed: boolean;
   message: string;
@@ -338,6 +345,10 @@ export class CitySimulation {
       demandDriver: '住房缺口',
       demandAction: '沿道路规划住宅区',
       demandUrgency: 0,
+      forecastRisk: 0,
+      forecastFocus: '稳定',
+      forecastAction: '继续扩建并保留现金缓冲',
+      cashRunwayDays: 999,
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
@@ -977,6 +988,7 @@ export class CitySimulation {
     const taxPressure = taxRatePercent - 9;
     const landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
     const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure);
+    const monthlyCashFlow = this.estimateMonthlyCashFlow(stats, pollution);
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
@@ -1004,6 +1016,11 @@ export class CitySimulation {
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
+    const forecast = this.createRiskForecast(stats, monthlyCashFlow);
+    this.metrics.forecastRisk = forecast.risk;
+    this.metrics.forecastFocus = forecast.focus;
+    this.metrics.forecastAction = forecast.action;
+    this.metrics.cashRunwayDays = forecast.cashRunwayDays;
   }
 
   private calculateDemand(
@@ -1216,6 +1233,55 @@ export class CitySimulation {
     return 10;
   }
 
+  private estimateMonthlyCashFlow(stats: GridStats, pollution: number): number {
+    const income = Math.floor(this.metrics.population * this.getTaxRatePercent() * 0.16 + stats.jobs * 3);
+    const expenses = Math.floor(stats.roads * 4 + stats.zonedTiles * 3 + this.metrics.population * 0.6 + pollution);
+    return income - expenses;
+  }
+
+  private createRiskForecast(stats: GridStats, monthlyCashFlow: number): RiskForecast {
+    const cashRunwayDays = monthlyCashFlow < 0
+      ? Math.max(0, Math.min(999, Math.floor((Math.max(0, this.metrics.cash) / Math.max(1, -monthlyCashFlow)) * 30)))
+      : 999;
+    const candidates = [
+      {
+        risk: this.metrics.cash < 0 ? 100 : monthlyCashFlow < 0 ? Math.max(55, 100 - cashRunwayDays) : this.metrics.cash < 5000 ? 52 : 0,
+        focus: '财政',
+        action: monthlyCashFlow < 0 ? '交付订单并暂缓扩建' : '保留现金缓冲',
+      },
+      {
+        risk: this.metrics.congestion,
+        focus: '交通',
+        action: this.metrics.congestion > 35 ? '升级瓶颈道路' : '保持道路容量',
+      },
+      {
+        risk: stats.residentialTiles >= 2 ? this.metrics.serviceGapPressure : 0,
+        focus: '服务',
+        action: '补公园、诊所或学校',
+      },
+      {
+        risk: this.metrics.pollution,
+        focus: '环境',
+        action: '分散工业并补公园',
+      },
+      {
+        risk: this.getStorageUsed() >= STORAGE_CAPACITY ? 70 : 0,
+        focus: '仓库',
+        action: '交付订单或升级住宅',
+      },
+    ].sort((a, b) => b.risk - a.risk)[0];
+
+    if (candidates.risk < 35) {
+      return { risk: Math.round(candidates.risk), focus: '稳定', action: '继续扩建并保留现金缓冲', cashRunwayDays };
+    }
+    return {
+      risk: Math.round(Math.min(100, candidates.risk)),
+      focus: candidates.focus,
+      action: candidates.action,
+      cashRunwayDays,
+    };
+  }
+
   private isResidentialCoveredBy(
     residential: { x: number; y: number },
     services: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }>,
@@ -1239,9 +1305,7 @@ export class CitySimulation {
 
   private processEconomy(): void {
     const stats = this.calculateGridStats();
-    const income = Math.floor(this.metrics.population * this.getTaxRatePercent() * 0.16 + stats.jobs * 3);
-    const expenses = Math.floor(stats.roads * 4 + stats.zonedTiles * 3 + this.metrics.population * 0.6 + this.metrics.pollution);
-    this.metrics.cash += income - expenses;
+    this.metrics.cash += this.estimateMonthlyCashFlow(stats, this.metrics.pollution);
     if (this.metrics.cash < 0) this.metrics.cash -= Math.max(0, this.metrics.cash + 500);
   }
 

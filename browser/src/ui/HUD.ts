@@ -254,6 +254,8 @@ export class HUD {
     const roadUpgradeLocked = roadUpgradeEntry ? !roadUpgradeEntry.unlocked : false;
     const currentTaxLevel = this.metrics?.taxLevel ?? CityTaxLevel.Normal;
     const taxRatePercent = this.metrics?.taxRatePercent ?? 9;
+    const cashRunwayDays = this.metrics?.cashRunwayDays ?? 999;
+    const cashRunwayText = cashRunwayDays >= 999 ? '稳定' : cashRunwayDays + '天';
 
     this.managementPanel.innerHTML =
       '<strong>财政</strong> 税率 ' + taxRatePercent + '%<br>' +
@@ -262,6 +264,10 @@ export class HUD {
       this.taxButtonHtml(CityTaxLevel.Normal, currentTaxLevel) +
       this.taxButtonHtml(CityTaxLevel.High, currentTaxLevel) +
       '</div>' +
+      '<span style="color:#f2d479">风险: ' + (this.metrics?.forecastRisk ?? 0) +
+      ' / ' + (this.metrics?.forecastFocus ?? '稳定') +
+      ' -> ' + (this.metrics?.forecastAction ?? '继续扩建并保留现金缓冲') +
+      ' / 现金续航: ' + cashRunwayText + '</span><br><br>' +
       '<strong>分区需求</strong> 住' + (this.metrics?.residentialDemand ?? 0) +
       ' / 商' + (this.metrics?.commercialDemand ?? 0) +
       ' / 工' + (this.metrics?.industrialDemand ?? 0) + '<br>' +
