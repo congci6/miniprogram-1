@@ -5,6 +5,7 @@ import {
   CityOrder,
   CityTileInspection,
   CityTaxLevel,
+  CityTimeScale,
   CityUnlockActionId,
   CityUnlockState,
   MaterialId,
@@ -38,6 +39,11 @@ const TAX_LABELS: Record<CityTaxLevel, string> = {
   [CityTaxLevel.Low]: '低税',
   [CityTaxLevel.Normal]: '标准',
   [CityTaxLevel.High]: '高税',
+};
+const TIME_SCALE_LABELS: Record<CityTimeScale, string> = {
+  0: '暂停',
+  1: '1x',
+  2: '2x',
 };
 
 const SERVICE_BUILDING_LABELS: Record<string, string> = {
@@ -100,6 +106,7 @@ export class HUD {
   private buttons = new Map<PlanningTool, HTMLButtonElement>();
   private selectedInspection: CityTileInspection | null = null;
   private inspectionLegend = '图例: 绿住宅 蓝商业 橙工业 黑道路 粉服务 黄选中';
+  private timeScale: CityTimeScale = 1;
 
   constructor() {
     const c = document.getElementById('hud-overlay')!;
@@ -163,6 +170,7 @@ export class HUD {
       if (e.detail.selectedTool) this.selectedTool = e.detail.selectedTool;
       if (e.detail.message) this.selectedMessage = e.detail.message;
       if ('selectedInspection' in e.detail) this.selectedInspection = e.detail.selectedInspection ?? null;
+      if ('timeScale' in e.detail && this.isTimeScale(e.detail.timeScale)) this.timeScale = e.detail.timeScale;
       this.inspectionLegend = e.detail.inspectionLegend ?? this.inspectionLegend;
       this.materials = e.detail.materials ?? this.materials;
       this.productionQueue = e.detail.productionQueue ?? this.productionQueue;
@@ -270,6 +278,12 @@ export class HUD {
     const cashRunwayText = cashRunwayDays >= 999 ? '稳定' : cashRunwayDays + '天';
 
     this.managementPanel.innerHTML =
+      '<strong>时间</strong> ' + TIME_SCALE_LABELS[this.timeScale] + '<br>' +
+      '<div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap">' +
+      this.timeScaleButtonHtml(0) +
+      this.timeScaleButtonHtml(1) +
+      this.timeScaleButtonHtml(2) +
+      '</div>' +
       '<strong>财政</strong> 税率 ' + taxRatePercent + '%<br>' +
       '<div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap">' +
       this.taxButtonHtml(CityTaxLevel.Low, currentTaxLevel) +
@@ -359,6 +373,14 @@ export class HUD {
         window.dispatchEvent(new CustomEvent('city-tax-level-change', { detail: { level } }));
       });
     });
+    this.managementPanel.querySelectorAll<HTMLButtonElement>('button[data-time-scale]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const timeScale = Number(button.dataset.timeScale);
+        if (this.isTimeScale(timeScale)) {
+          window.dispatchEvent(new CustomEvent('city-time-scale-change', { detail: { timeScale } }));
+        }
+      });
+    });
     this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade"]')
       ?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('city-upgrade-selected-residential')));
     this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade-road"]')
@@ -377,6 +399,13 @@ export class HUD {
     const selected = level === currentLevel;
     return '<button data-tax-level="' + level + '" style="' + this.actionButtonStyle(selected ? '#6ea85f' : '#263239') + '">' +
       TAX_LABELS[level] +
+      '</button>';
+  }
+
+  private timeScaleButtonHtml(timeScale: CityTimeScale): string {
+    const selected = timeScale === this.timeScale;
+    return '<button data-time-scale="' + timeScale + '" style="' + this.actionButtonStyle(selected ? '#6ea85f' : '#263239') + '">' +
+      TIME_SCALE_LABELS[timeScale] +
       '</button>';
   }
 
@@ -408,6 +437,10 @@ export class HUD {
     return (Object.entries(cost) as Array<[MaterialId, number]>)
       .map(([materialId, count]) => MATERIAL_LABELS[materialId] + 'x' + count)
       .join('、');
+  }
+
+  private isTimeScale(value: unknown): value is CityTimeScale {
+    return value === 0 || value === 1 || value === 2;
   }
 
   private residentialLevelLabel(tile: Tile): string {

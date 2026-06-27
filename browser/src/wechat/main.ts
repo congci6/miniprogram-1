@@ -1,5 +1,5 @@
 import { CityOfflineProgressResult, CitySimulation, type CitySimulationSaveData } from '@/simulation/city-simulation';
-import { CityTaxLevel, CityUnlockActionId, MaterialCost, MaterialId, PlanningTool, ServiceBuildingId, TerrainType, ZoneType } from '@/types/index';
+import { CityTaxLevel, CityTimeScale, CityUnlockActionId, MaterialCost, MaterialId, PlanningTool, ServiceBuildingId, TerrainType, ZoneType } from '@/types/index';
 import type { Tile } from '@/simulation/grid';
 
 declare const wx: WeChatRuntime | undefined;
@@ -40,7 +40,7 @@ interface ToolButton {
 }
 
 interface ActionButton {
-  kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad' | 'tax';
+  kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad' | 'tax' | 'timeScale';
   label: string;
   lockedMessage?: string;
   x: number;
@@ -50,6 +50,7 @@ interface ActionButton {
   materialId?: MaterialId;
   orderId?: string;
   taxLevel?: CityTaxLevel;
+  timeScale?: CityTimeScale;
 }
 
 const RUNTIME_MARKER = 'NON_UNITY_WECHAT_CANVAS_RUNTIME';
@@ -87,6 +88,11 @@ const TAX_LABELS: Record<CityTaxLevel, string> = {
   [CityTaxLevel.Normal]: '标准',
   [CityTaxLevel.High]: '高税',
 };
+const TIME_SCALE_LABELS: Record<CityTimeScale, string> = {
+  0: '暂停',
+  1: '1x',
+  2: '2x',
+};
 const SERVICE_MARKER_COLORS: Record<string, string> = {
   community_park: '#8fe06f',
   community_clinic: '#ff7f9f',
@@ -102,6 +108,7 @@ class WeChatCityGame {
   private readonly actionButtons: ActionButton[] = [];
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: Tile | null = null;
+  private timeScale: CityTimeScale = 1;
   private statusText = '选择工具后点击地块开始规划';
   private lastPaintKey = '';
   private lastTime = Date.now();
@@ -152,7 +159,7 @@ class WeChatCityGame {
       const now = Date.now();
       const delta = Math.min(0.25, (now - this.lastTime) / 1000);
       this.lastTime = now;
-      if (this.sim.tick(delta)) this.save();
+      if (this.timeScale > 0 && this.sim.tick(delta * this.timeScale)) this.save();
       this.draw();
       requestFrame(frame);
     };
@@ -511,7 +518,7 @@ class WeChatCityGame {
     const x = this.width - 262;
     const y = 54;
     const width = 250;
-    const height = 242;
+    const height = 290;
     this.layoutActionButtons();
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, height, 6);
@@ -540,7 +547,8 @@ class WeChatCityGame {
     this.actionButtons.forEach((button) => {
       const locked = Boolean(button.lockedMessage);
       const selectedTax = button.kind === 'tax' && button.taxLevel === this.sim.metrics.taxLevel;
-      const highlighted = button.kind === 'upgrade' || selectedTax;
+      const selectedTimeScale = button.kind === 'timeScale' && button.timeScale === this.timeScale;
+      const highlighted = button.kind === 'upgrade' || selectedTax || selectedTimeScale;
       this.ctx.fillStyle = locked ? '#30363a' : highlighted ? '#6ea85f' : '#263239';
       this.roundRect(button.x, button.y, button.width, button.height, 5);
       this.ctx.fill();
@@ -604,10 +612,22 @@ class WeChatCityGame {
   private layoutActionButtons(): void {
     this.actionButtons.length = 0;
     const x = this.width - 250;
-    const y = 190;
     const width = 48;
     const gap = 6;
     const unlockState = this.sim.getUnlockState();
+    const timeY = 190;
+    ([0, 1, 2] as CityTimeScale[]).forEach((timeScale, index) => {
+      this.actionButtons.push({
+        kind: 'timeScale',
+        timeScale,
+        label: TIME_SCALE_LABELS[timeScale],
+        x: x + index * 62,
+        y: timeY,
+        width: 56,
+        height: 28,
+      });
+    });
+    const productionY = timeY + 36;
     (Object.keys(MATERIAL_LABELS) as MaterialId[]).forEach((materialId, index) => {
       const unlockEntry = unlockState.materials[materialId];
       this.actionButtons.push({
@@ -616,7 +636,7 @@ class WeChatCityGame {
         label: MATERIAL_LABELS[materialId] + this.lockSuffix(unlockEntry),
         lockedMessage: unlockEntry.unlocked ? undefined : this.lockedMessage(unlockEntry.label, unlockEntry.unlockLevel),
         x: x + index * (width + gap),
-        y,
+        y: productionY,
         width,
         height: 28,
       });
@@ -626,7 +646,7 @@ class WeChatCityGame {
       orderId: this.sim.orders[0]?.id,
       label: '交付',
       x,
-      y: y + 36,
+      y: productionY + 36,
       width: 74,
       height: 28,
     });
@@ -636,7 +656,7 @@ class WeChatCityGame {
       label: '升级住宅' + this.lockSuffix(residentialUpgrade),
       lockedMessage: residentialUpgrade.unlocked ? undefined : this.lockedMessage(residentialUpgrade.label, residentialUpgrade.unlockLevel),
       x: x + 82,
-      y: y + 36,
+      y: productionY + 36,
       width: 86,
       height: 28,
     });
@@ -646,11 +666,11 @@ class WeChatCityGame {
       label: '升道路' + this.lockSuffix(roadUpgrade),
       lockedMessage: roadUpgrade.unlocked ? undefined : this.lockedMessage(roadUpgrade.label, roadUpgrade.unlockLevel),
       x: x + 176,
-      y: y + 36,
+      y: productionY + 36,
       width: 66,
       height: 28,
     });
-    const taxY = y + 72;
+    const taxY = productionY + 72;
     ([CityTaxLevel.Low, CityTaxLevel.Normal, CityTaxLevel.High] as CityTaxLevel[]).forEach((taxLevel, index) => {
       this.actionButtons.push({
         kind: 'tax',
@@ -700,12 +720,25 @@ class WeChatCityGame {
             ? this.sim.upgradeRoadAt(this.selectedTile.pos.x, this.selectedTile.pos.y)
             : button.kind === 'tax' && button.taxLevel !== undefined
               ? this.sim.setTaxLevel(button.taxLevel)
-              : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
+              : button.kind === 'timeScale' && button.timeScale !== undefined
+                ? this.setTimeScale(button.timeScale)
+                : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
     this.statusText = result.message;
     if (result.changed) {
       this.vibrate('light');
       this.save();
     }
+  }
+
+  private setTimeScale(timeScale: CityTimeScale): { changed: boolean; message: string } {
+    if (this.timeScale === timeScale) {
+      return { changed: false, message: `速度已是 ${TIME_SCALE_LABELS[timeScale]}` };
+    }
+    this.timeScale = timeScale;
+    return {
+      changed: true,
+      message: timeScale === 0 ? '城市已暂停' : `模拟速度 ${TIME_SCALE_LABELS[timeScale]}`,
+    };
   }
 
   private residentialLevelFromBuilding(buildingId: string): number {

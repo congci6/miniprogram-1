@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { CityOfflineProgressResult, CitySimulation, CitySimulationSaveData } from '@/simulation/city-simulation';
 import { IsometricRenderer } from '@/game/view/iso-renderer';
-import { CityTaxLevel, MaterialId, PlanningTool } from '@/types/index';
+import { CityTaxLevel, CityTimeScale, MaterialId, PlanningTool } from '@/types/index';
 
 const BROWSER_SAVE_KEY = 'pocket-city-planner-browser-save';
 const MATERIAL_LABELS: Record<MaterialId, string> = {
@@ -19,6 +19,7 @@ export class GameScene extends Phaser.Scene {
   private saveTimer = 0;
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: { x: number; y: number } | null = null;
+  private timeScale: CityTimeScale = 1;
   private paintedThisDrag = new Set<string>();
   private isCameraPanning = false;
   private panStart: { pointerX: number; pointerY: number; scrollX: number; scrollY: number } | null = null;
@@ -57,6 +58,12 @@ export class GameScene extends Phaser.Scene {
       const result = this.sim.setTaxLevel(level);
       if (result.changed) this.save();
       this.publishMetrics(result.message);
+    }) as EventListener);
+    window.addEventListener('city-time-scale-change', ((event: Event) => {
+      const timeScale = (event as CustomEvent<{ timeScale: CityTimeScale }>).detail.timeScale;
+      if (!this.isTimeScale(timeScale)) return;
+      this.timeScale = timeScale;
+      this.publishMetrics(timeScale === 0 ? '城市已暂停' : `模拟速度 ${timeScale}x`);
     }) as EventListener);
     window.addEventListener('city-upgrade-selected-residential', () => {
       if (!this.selectedTile) {
@@ -122,7 +129,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    const simulationChanged = this.sim.tick(delta / 1000);
+    const simulationChanged = this.timeScale > 0 && this.sim.tick((delta / 1000) * this.timeScale);
     if (simulationChanged) {
       this.isoRender.render();
       this.save();
@@ -187,6 +194,10 @@ export class GameScene extends Phaser.Scene {
     this.cameras.main.setZoom(nextZoom);
   }
 
+  private isTimeScale(value: unknown): value is CityTimeScale {
+    return value === 0 || value === 1 || value === 2;
+  }
+
   private tileFromPointer(pointer: Phaser.Input.Pointer): { x: number; y: number } | null {
     const worldPoint = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
     return this.isoRender.getTileAtWorld(worldPoint.x, worldPoint.y);
@@ -206,6 +217,7 @@ export class GameScene extends Phaser.Scene {
         objectives: this.sim.getObjectives(),
         unlockState: this.sim.getUnlockState(),
         selectedTool: this.selectedTool,
+        timeScale: this.timeScale,
         selectedInspection: this.selectedTile ? this.sim.getTileInspection(this.selectedTile.x, this.selectedTile.y) : null,
         inspectionLegend: this.sim.getTileInspectionLegend(),
         message,

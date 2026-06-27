@@ -19,6 +19,7 @@ export enum CityPolicy {
   CongestionPricing, ParkingFees,
 }
 export enum CityTaxLevel { Low, Normal, High }
+export type CityTimeScale = 0 | 1 | 2;
 export enum ServiceBudgetLevel { Lean, Standard, Boosted }
 export enum RoadTier { Local, Arterial }
 export enum BuildingRotation { None = 0, North, East, South, West }
