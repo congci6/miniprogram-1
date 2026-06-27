@@ -76,6 +76,7 @@ export interface CityMetrics {
   demandFocus: string; demandDriver: string; demandAction: string; demandUrgency: number;
   forecastRisk: number; forecastFocus: string; forecastAction: string; cashRunwayDays: number;
   serviceGapAdvisorScore: number; serviceGapAdvisorFocus: string; serviceGapAdvisorDriver: string; serviceGapAdvisorAction: string;
+  roadHierarchyPressure: number; roadHierarchyFocus: string; roadHierarchyDriver: string; roadHierarchyAction: string;
   congestion: number; pollution: number; crime: number;
   healthCoverage: number; educationCoverage: number;
   safetyCoverage: number; securityCoverage: number;

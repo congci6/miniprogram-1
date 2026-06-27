@@ -272,6 +272,10 @@ export class HUD {
       ' ' + (this.metrics?.serviceGapAdvisorScore ?? 0) +
       ' / ' + (this.metrics?.serviceGapAdvisorDriver ?? '暂无住宅服务压力') +
       ' -> ' + (this.metrics?.serviceGapAdvisorAction ?? '继续观察新住宅片区') + '</span><br><br>' +
+      '<span style="color:#b8d8ff">道路层级: ' + (this.metrics?.roadHierarchyFocus ?? '稳定') +
+      ' ' + (this.metrics?.roadHierarchyPressure ?? 0) +
+      ' / ' + (this.metrics?.roadHierarchyDriver ?? '道路容量可控') +
+      ' -> ' + (this.metrics?.roadHierarchyAction ?? '继续按新区补道路') + '</span><br><br>' +
       '<strong>分区需求</strong> 住' + (this.metrics?.residentialDemand ?? 0) +
       ' / 商' + (this.metrics?.commercialDemand ?? 0) +
       ' / 工' + (this.metrics?.industrialDemand ?? 0) + '<br>' +

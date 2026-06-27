@@ -60,6 +60,13 @@ interface ServiceGapAdvisor {
   action: string;
 }
 
+interface RoadHierarchyAdvisor {
+  pressure: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 export interface PlanningActionResult {
   changed: boolean;
   message: string;
@@ -360,6 +367,10 @@ export class CitySimulation {
       serviceGapAdvisorFocus: '均衡',
       serviceGapAdvisorDriver: '暂无住宅服务压力',
       serviceGapAdvisorAction: '先接路规划住宅',
+      roadHierarchyPressure: 0,
+      roadHierarchyFocus: '骨架',
+      roadHierarchyDriver: '道路尚未形成压力',
+      roadHierarchyAction: '按分区接入道路',
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
@@ -1001,6 +1012,7 @@ export class CitySimulation {
     const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure);
     const monthlyCashFlow = this.estimateMonthlyCashFlow(stats, pollution);
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
+    const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
@@ -1037,6 +1049,10 @@ export class CitySimulation {
     this.metrics.serviceGapAdvisorFocus = serviceAdvisor.focus;
     this.metrics.serviceGapAdvisorDriver = serviceAdvisor.driver;
     this.metrics.serviceGapAdvisorAction = serviceAdvisor.action;
+    this.metrics.roadHierarchyPressure = roadAdvisor.pressure;
+    this.metrics.roadHierarchyFocus = roadAdvisor.focus;
+    this.metrics.roadHierarchyDriver = roadAdvisor.driver;
+    this.metrics.roadHierarchyAction = roadAdvisor.action;
   }
 
   private calculateDemand(
@@ -1338,6 +1354,61 @@ export class CitySimulation {
       focus: focus.label,
       driver: `${focus.label}覆盖仅${Math.round(focus.coverage)}%`,
       action,
+    };
+  }
+
+  private createRoadHierarchyAdvisor(stats: GridStats, roadCoverage: number, congestion: number): RoadHierarchyAdvisor {
+    if (stats.roads === 0) {
+      return {
+        pressure: stats.zonedTiles > 0 ? 72 : 20,
+        focus: '接入',
+        driver: stats.zonedTiles > 0 ? '分区尚未接入道路' : '道路尚未形成骨架',
+        action: '先铺第一段道路',
+      };
+    }
+
+    if (stats.zonedTiles > 0 && roadCoverage < 55) {
+      return {
+        pressure: Math.round(Math.max(45, 100 - roadCoverage)),
+        focus: '接入',
+        driver: `道路覆盖仅${Math.round(roadCoverage)}%`,
+        action: '补道路接入分区',
+      };
+    }
+
+    if (congestion > 35) {
+      return {
+        pressure: Math.round(congestion),
+        focus: '瓶颈',
+        driver: `拥堵${Math.round(congestion)}`,
+        action: this.isLevelUnlocked(ROAD_UPGRADE_UNLOCK_LEVEL) ? '升级瓶颈道路' : `升到 Lv${ROAD_UPGRADE_UNLOCK_LEVEL} 解锁主干道`,
+      };
+    }
+
+    if (stats.developedZoneTiles >= 3 && stats.upgradedRoads === 0) {
+      return {
+        pressure: 58,
+        focus: '主干',
+        driver: '缺少主干道骨架',
+        action: this.isLevelUnlocked(ROAD_UPGRADE_UNLOCK_LEVEL) ? '选择普通道路升级' : `升到 Lv${ROAD_UPGRADE_UNLOCK_LEVEL} 解锁主干道`,
+      };
+    }
+
+    const arterialShare = stats.roads === 0 ? 0 : stats.upgradedRoads / stats.roads;
+    if (stats.roads >= 8 && arterialShare < 0.2) {
+      return {
+        pressure: 46,
+        focus: '层级',
+        driver: '主干道占比偏低',
+        action: '把核心路段升级为主干道',
+      };
+    }
+
+    return {
+      pressure: Math.round(Math.min(30, Math.max(0, congestion))),
+      focus: '稳定',
+      driver: '道路容量可控',
+      action: '继续按新区补道路',
     };
   }
 
