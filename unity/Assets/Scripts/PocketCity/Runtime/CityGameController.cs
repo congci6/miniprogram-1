@@ -26,6 +26,7 @@ namespace PocketCity.Runtime
         private CitySimulationCore simulation;
         private ConstructionPreview currentPreview;
         private int commandFeedbackVersion;
+        private int runtimeSessionVersion;
         private bool lastCommandSucceeded;
         private bool lastCommandWasCommit;
         private CommandCommitKind lastCommandCommitKind;
@@ -47,6 +48,11 @@ namespace PocketCity.Runtime
         public int CommandFeedbackVersion
         {
             get { return commandFeedbackVersion; }
+        }
+
+        public int RuntimeSessionVersion
+        {
+            get { return runtimeSessionVersion; }
         }
 
         public bool LastCommandSucceeded
@@ -130,6 +136,11 @@ namespace PocketCity.Runtime
             {
                 simulation.Reset();
                 simulation.MarkMetricsDirty();
+                currentPreview = null;
+                lastPublishedCityEvent = string.Empty;
+                lastSettlementFeedbackDay = -1;
+                lastExpansionUnlocked = Metrics != null && Metrics.LockedExpansionUnlocked;
+                ResetAdvisorRuntimeSession();
             }
         }
 
@@ -150,7 +161,7 @@ namespace PocketCity.Runtime
             simulation = new CitySimulationCore(config);
 
             // 初始化智能顾问系统
-            CityHudViewModelSmartAdvisor.SetContextTracker(simulation.AdvisorContext);
+            ResetAdvisorRuntimeSession();
 
             lastExpansionUnlocked = Metrics != null && Metrics.LockedExpansionUnlocked;
         }
@@ -537,7 +548,10 @@ namespace PocketCity.Runtime
                 {
                     simulation = importedSimulation;
                     currentPreview = null;
+                    lastPublishedCityEvent = string.Empty;
+                    lastSettlementFeedbackDay = -1;
                     lastExpansionUnlocked = Metrics != null && Metrics.LockedExpansionUnlocked;
+                    ResetAdvisorRuntimeSession();
                 }
 
                 return imported;
@@ -772,6 +786,16 @@ namespace PocketCity.Runtime
             {
                 platformBridge.VibrateWarning();
             }
+        }
+
+        private void ResetAdvisorRuntimeSession()
+        {
+            runtimeSessionVersion += 1;
+            lastCommandSucceeded = false;
+            lastCommandWasCommit = false;
+            lastCommandCommitKind = CommandCommitKind.None;
+            lastCommandFeedbackText = string.Empty;
+            CityHudViewModelSmartAdvisor.ResetRuntimeState(simulation != null ? simulation.AdvisorContext : null);
         }
 
         public void PublishHudFeedback(string text, bool success)

@@ -193,6 +193,7 @@ namespace PocketCity.Runtime
         private float commandFeedbackPulseTimer;
         private float objectivePulseTimer;
         private int seenCommandFeedbackVersion;
+        private int seenRuntimeSessionVersion = -1;
         private int lastObjectiveProgress;
         private int lastObjectiveRequired;
         private bool lastCommandFeedbackSucceeded;
@@ -8786,6 +8787,16 @@ namespace PocketCity.Runtime
 
         private void RefreshCommandFeedbackPulse()
         {
+            if (controller != null && seenRuntimeSessionVersion != controller.RuntimeSessionVersion)
+            {
+                seenRuntimeSessionVersion = controller.RuntimeSessionVersion;
+                seenCommandFeedbackVersion = controller.CommandFeedbackVersion;
+                lastCommandFeedbackSucceeded = controller.LastCommandSucceeded;
+                commandFeedbackText = controller.LastCommandFeedbackText;
+                commandFeedbackPulseTimer = 0f;
+                ClearPendingAdvisorAdoption();
+            }
+
             if (controller == null || seenCommandFeedbackVersion == controller.CommandFeedbackVersion)
             {
                 ExpirePendingAdvisorAdoption();

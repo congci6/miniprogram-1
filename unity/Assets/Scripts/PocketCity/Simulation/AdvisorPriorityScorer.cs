@@ -28,6 +28,13 @@ namespace PocketCity.Simulation
             contextTracker = tracker;
         }
 
+        public void ResetState()
+        {
+            lastShownTime.Clear();
+            shownCount.Clear();
+            userActedCount.Clear();
+        }
+
         // 记录用户采纳了某个顾问的建议
         public void RecordUserAction(string advisorType)
         {

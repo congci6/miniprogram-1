@@ -94,6 +94,7 @@ namespace PocketCity.Simulation
             AddCityEvent("\u57ce\u5e02\u5f00\u5c40\uff1a\u5df2\u51c6\u5907\u9996\u4e2a\u8857\u533a");
             MarkMetricsDirty();
             RecomputeMetrics();
+            advisorContext.Reset();
         }
 
         public void Tick(float deltaSeconds)

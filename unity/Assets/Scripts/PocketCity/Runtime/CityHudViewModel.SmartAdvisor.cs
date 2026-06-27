@@ -17,6 +17,13 @@ namespace PocketCity.Runtime
             Scorer.SetContextTracker(tracker);
         }
 
+        public static void ResetRuntimeState(AdvisorContextTracker tracker)
+        {
+            contextTracker = tracker;
+            Scorer.ResetState();
+            Scorer.SetContextTracker(tracker);
+        }
+
         public static List<string> BuildSmartInsightPriorityStack(CityHudSnapshot snapshot, CityMetrics metrics, int maxInsights = 3)
         {
             var result = new List<string>();
