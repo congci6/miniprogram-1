@@ -53,6 +53,13 @@ interface RiskForecast {
   cashRunwayDays: number;
 }
 
+interface ServiceGapAdvisor {
+  score: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 export interface PlanningActionResult {
   changed: boolean;
   message: string;
@@ -349,6 +356,10 @@ export class CitySimulation {
       forecastFocus: '稳定',
       forecastAction: '继续扩建并保留现金缓冲',
       cashRunwayDays: 999,
+      serviceGapAdvisorScore: 0,
+      serviceGapAdvisorFocus: '均衡',
+      serviceGapAdvisorDriver: '暂无住宅服务压力',
+      serviceGapAdvisorAction: '先接路规划住宅',
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
@@ -989,6 +1000,7 @@ export class CitySimulation {
     const landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
     const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure);
     const monthlyCashFlow = this.estimateMonthlyCashFlow(stats, pollution);
+    const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
@@ -1021,6 +1033,10 @@ export class CitySimulation {
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
     this.metrics.cashRunwayDays = forecast.cashRunwayDays;
+    this.metrics.serviceGapAdvisorScore = serviceAdvisor.score;
+    this.metrics.serviceGapAdvisorFocus = serviceAdvisor.focus;
+    this.metrics.serviceGapAdvisorDriver = serviceAdvisor.driver;
+    this.metrics.serviceGapAdvisorAction = serviceAdvisor.action;
   }
 
   private calculateDemand(
@@ -1279,6 +1295,49 @@ export class CitySimulation {
       focus: candidates.focus,
       action: candidates.action,
       cashRunwayDays,
+    };
+  }
+
+  private createServiceGapAdvisor(
+    stats: GridStats,
+    parkCoverage: number,
+    healthCoverage: number,
+    educationCoverage: number,
+  ): ServiceGapAdvisor {
+    if (stats.residentialTiles === 0) {
+      return {
+        score: 0,
+        focus: '均衡',
+        driver: '暂无住宅服务压力',
+        action: stats.roads > 0 ? '沿道路规划住宅区' : '先铺道路再规划住宅',
+      };
+    }
+
+    const focus = [
+      { label: '公园', coverage: parkCoverage, serviceId: 'community_park' as ServiceBuildingId, action: '补公园' },
+      { label: '医疗', coverage: healthCoverage, serviceId: 'community_clinic' as ServiceBuildingId, action: '补诊所' },
+      { label: '教育', coverage: educationCoverage, serviceId: 'community_school' as ServiceBuildingId, action: '补学校' },
+    ].sort((a, b) => a.coverage - b.coverage)[0];
+
+    const score = Math.round(Math.max(0, 100 - focus.coverage));
+    if (focus.coverage >= 70) {
+      return {
+        score,
+        focus: '均衡',
+        driver: '主要服务已覆盖',
+        action: '继续观察新住宅片区',
+      };
+    }
+
+    const service = SERVICE_BUILDINGS[focus.serviceId];
+    const action = this.isLevelUnlocked(service.unlockLevel)
+      ? stats.roads > 0 ? focus.action : '先铺道路，服务建筑要临路'
+      : `升到 Lv${service.unlockLevel} 解锁${service.label}`;
+    return {
+      score,
+      focus: focus.label,
+      driver: `${focus.label}覆盖仅${Math.round(focus.coverage)}%`,
+      action,
     };
   }
 

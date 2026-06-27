@@ -268,6 +268,10 @@ export class HUD {
       ' / ' + (this.metrics?.forecastFocus ?? '稳定') +
       ' -> ' + (this.metrics?.forecastAction ?? '继续扩建并保留现金缓冲') +
       ' / 现金续航: ' + cashRunwayText + '</span><br><br>' +
+      '<span style="color:#d6c7ff">服务短板: ' + (this.metrics?.serviceGapAdvisorFocus ?? '均衡') +
+      ' ' + (this.metrics?.serviceGapAdvisorScore ?? 0) +
+      ' / ' + (this.metrics?.serviceGapAdvisorDriver ?? '暂无住宅服务压力') +
+      ' -> ' + (this.metrics?.serviceGapAdvisorAction ?? '继续观察新住宅片区') + '</span><br><br>' +
       '<strong>分区需求</strong> 住' + (this.metrics?.residentialDemand ?? 0) +
       ' / 商' + (this.metrics?.commercialDemand ?? 0) +
       ' / 工' + (this.metrics?.industrialDemand ?? 0) + '<br>' +

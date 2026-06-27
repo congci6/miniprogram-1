@@ -521,7 +521,7 @@ class WeChatCityGame {
         : '点击地图查看详情',
       this.selectedTile?.buildingId
         ? `建筑: ${SERVICE_BUILDING_LABELS[this.selectedTile.buildingId] ?? this.selectedTile.buildingId}`
-        : `服务缺口: ${Math.round(m.serviceGapPressure)}`,
+        : this.compactText(`短板: ${m.serviceGapAdvisorFocus}${m.serviceGapAdvisorScore} -> ${m.serviceGapAdvisorAction}`, 28),
       this.selectedTile?.zone === ZoneType.Residential
         ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile) || '待开发'}`
         : `订单交付: ${this.sim.completedOrders}`,
