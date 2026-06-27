@@ -1,13 +1,14 @@
 import * as Phaser from 'phaser';
 import { CitySimulation } from '@/simulation/city-simulation';
 import { IsometricRenderer } from '@/game/view/iso-renderer';
-import { PlanningTool } from '@/types/index';
+import { MaterialId, PlanningTool } from '@/types/index';
 
 export class GameScene extends Phaser.Scene {
   private sim!: CitySimulation;
   private isoRender!: IsometricRenderer;
   private hudTimer = 0;
   private selectedTool: PlanningTool = 'inspect';
+  private selectedTile: { x: number; y: number } | null = null;
   private paintedThisDrag = new Set<string>();
 
   constructor() { super({ key: 'GameScene' }); }
@@ -24,6 +25,28 @@ export class GameScene extends Phaser.Scene {
       this.paintedThisDrag.clear();
       this.publishMetrics();
     }) as EventListener);
+    window.addEventListener('city-production-start', ((event: Event) => {
+      const materialId = (event as CustomEvent<{ materialId: MaterialId }>).detail.materialId;
+      const result = this.sim.startProduction(materialId);
+      this.publishMetrics(result.message);
+    }) as EventListener);
+    window.addEventListener('city-order-fulfill', ((event: Event) => {
+      const orderId = (event as CustomEvent<{ orderId: string }>).detail.orderId;
+      const result = this.sim.fulfillOrder(orderId);
+      this.publishMetrics(result.message);
+    }) as EventListener);
+    window.addEventListener('city-upgrade-selected-residential', () => {
+      if (!this.selectedTile) {
+        this.publishMetrics('请先选择一个住宅地块');
+        return;
+      }
+      const result = this.sim.upgradeResidentialAt(this.selectedTile.x, this.selectedTile.y);
+      if (result.changed) this.isoRender.render();
+      window.dispatchEvent(new CustomEvent('city-tile-selected', {
+        detail: { tile: this.sim.grid.getTile(this.selectedTile.x, this.selectedTile.y), message: result.message },
+      }));
+      this.publishMetrics(result.message);
+    });
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.applyToolAtPointer(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
@@ -55,6 +78,7 @@ export class GameScene extends Phaser.Scene {
 
     const result = this.sim.applyTool(tile.x, tile.y, this.selectedTool);
     const selectedTile = this.sim.grid.getTile(tile.x, tile.y);
+    this.selectedTile = tile;
     if (result.changed) this.isoRender.render();
 
     window.dispatchEvent(new CustomEvent('city-tile-selected', {
@@ -72,6 +96,13 @@ export class GameScene extends Phaser.Scene {
     window.dispatchEvent(new CustomEvent('city-metrics-update', {
       detail: {
         metrics: this.sim.metrics,
+        materials: this.sim.materials,
+        productionQueue: this.sim.productionQueue,
+        productionSlots: this.sim.getProductionSlots(),
+        storageUsed: this.sim.getStorageUsed(),
+        storageCapacity: this.sim.getStorageCapacity(),
+        orders: this.sim.orders,
+        completedOrders: this.sim.completedOrders,
         selectedTool: this.selectedTool,
         message,
       },

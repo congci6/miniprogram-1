@@ -1,5 +1,5 @@
-import { CitySimulation } from '@/simulation/city-simulation';
-import { CityMetrics, PlanningTool, TerrainType, ZoneType } from '@/types/index';
+import { CitySimulation, type CitySimulationSaveData } from '@/simulation/city-simulation';
+import { MaterialCost, MaterialId, PlanningTool, TerrainType, ZoneType } from '@/types/index';
 import type { Tile } from '@/simulation/grid';
 
 declare const wx: WeChatRuntime | undefined;
@@ -39,10 +39,15 @@ interface ToolButton {
   height: number;
 }
 
-interface CitySaveData {
-  version: 1;
-  metrics: CityMetrics;
-  tiles: Array<{ x: number; y: number; zone: ZoneType; roadId: string; buildingId: string }>;
+interface ActionButton {
+  kind: 'produce' | 'fulfillOrder' | 'upgrade';
+  label: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  materialId?: MaterialId;
+  orderId?: string;
 }
 
 const RUNTIME_MARKER = 'NON_UNITY_WECHAT_CANVAS_RUNTIME';
@@ -75,6 +80,11 @@ const TERRAIN_LABELS: Record<TerrainType, string> = {
   [TerrainType.Water]: '水域',
   [TerrainType.Hill]: '丘陵',
 };
+const MATERIAL_LABELS: Record<MaterialId, string> = {
+  wood: '木材',
+  metal: '金属',
+  plastic: '塑料',
+};
 
 class WeChatCityGame {
   private readonly canvas: WeChatCanvas;
@@ -82,6 +92,7 @@ class WeChatCityGame {
   private readonly dpr: number;
   private readonly sim = new CitySimulation(GRID_W, GRID_H);
   private readonly buttons: ToolButton[] = [];
+  private readonly actionButtons: ActionButton[] = [];
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: Tile | null = null;
   private statusText = '选择工具后点击地块开始规划';
@@ -106,6 +117,7 @@ class WeChatCityGame {
 
     this.restore();
     this.layoutTools();
+    this.layoutActionButtons();
     this.bindInput();
     this.startLoop();
   }
@@ -154,6 +166,12 @@ class WeChatCityGame {
         this.vibrate('light');
         return;
       }
+
+      const actionButton = this.actionButtons.find((candidate) => this.pointInRect(x, y, candidate));
+      if (actionButton) {
+        this.handleAction(actionButton);
+        return;
+      }
     }
 
     const tilePos = this.worldToTile(x, y);
@@ -179,6 +197,7 @@ class WeChatCityGame {
     this.drawGrid();
     this.drawTopBar();
     this.drawSidePanel();
+    this.drawManagementPanel();
     this.drawToolBar();
     this.drawStatus();
   }
@@ -274,6 +293,9 @@ class WeChatCityGame {
       this.selectedTile
         ? `地形: ${TERRAIN_LABELS[this.selectedTile.terrain]} 道路: ${this.selectedTile.roadId ? '已连接' : '无'}`
         : '点击地图查看详情',
+      this.selectedTile?.zone === ZoneType.Residential
+        ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile)}`
+        : `订单交付: ${this.sim.completedOrders}`,
       m.alerts.length ? `提醒: ${m.alerts.slice(0, 2).join('、')}` : '提醒: 城市运行平稳',
     ];
 
@@ -281,6 +303,47 @@ class WeChatCityGame {
     this.ctx.font = '12px sans-serif';
     this.ctx.textBaseline = 'top';
     lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 16));
+  }
+
+  private drawManagementPanel(): void {
+    const x = this.width - 262;
+    const y = 54;
+    const width = 250;
+    const height = 174;
+    this.layoutActionButtons();
+    this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
+    this.roundRect(x, y, width, height, 6);
+    this.ctx.fill();
+
+    const firstOrder = this.sim.orders[0];
+    const production = this.sim.productionQueue.length
+      ? this.sim.productionQueue.map((job) => `${job.label}${job.remainingDays}天`).join(' ')
+      : '空闲';
+    const lines = [
+      `仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()}  ${this.materialLine()}`,
+      `工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`,
+      firstOrder ? `订单: ${firstOrder.title} +$${firstOrder.rewardCash}` : '订单: 暂无',
+      firstOrder ? `需求: ${this.formatCost(firstOrder.required)}` : '需求: 无',
+    ];
+
+    this.ctx.fillStyle = '#dbe6df';
+    this.ctx.font = '12px sans-serif';
+    this.ctx.textBaseline = 'top';
+    lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 18));
+
+    this.actionButtons.forEach((button) => {
+      this.ctx.fillStyle = button.kind === 'upgrade' ? '#6ea85f' : '#263239';
+      this.roundRect(button.x, button.y, button.width, button.height, 5);
+      this.ctx.fill();
+      this.ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+      this.ctx.stroke();
+      this.ctx.fillStyle = button.kind === 'upgrade' ? '#07100b' : '#edf7ef';
+      this.ctx.font = '12px sans-serif';
+      this.ctx.textAlign = 'center';
+      this.ctx.textBaseline = 'middle';
+      this.ctx.fillText(button.label, button.x + button.width / 2, button.y + button.height / 2);
+      this.ctx.textAlign = 'left';
+    });
   }
 
   private drawToolBar(): void {
@@ -325,6 +388,57 @@ class WeChatCityGame {
     }
   }
 
+  private layoutActionButtons(): void {
+    this.actionButtons.length = 0;
+    const x = this.width - 250;
+    const y = 138;
+    const width = 48;
+    const gap = 6;
+    (Object.keys(MATERIAL_LABELS) as MaterialId[]).forEach((materialId, index) => {
+      this.actionButtons.push({
+        kind: 'produce',
+        materialId,
+        label: MATERIAL_LABELS[materialId],
+        x: x + index * (width + gap),
+        y,
+        width,
+        height: 28,
+      });
+    });
+    this.actionButtons.push({
+      kind: 'fulfillOrder',
+      orderId: this.sim.orders[0]?.id,
+      label: '交付',
+      x,
+      y: y + 36,
+      width: 74,
+      height: 28,
+    });
+    this.actionButtons.push({
+      kind: 'upgrade',
+      label: '升级住宅',
+      x: x + 82,
+      y: y + 36,
+      width: 86,
+      height: 28,
+    });
+  }
+
+  private handleAction(button: ActionButton): void {
+    const result = button.kind === 'produce' && button.materialId
+      ? this.sim.startProduction(button.materialId)
+      : button.kind === 'fulfillOrder' && button.orderId
+        ? this.sim.fulfillOrder(button.orderId)
+        : button.kind === 'upgrade' && this.selectedTile
+          ? this.sim.upgradeResidentialAt(this.selectedTile.pos.x, this.selectedTile.pos.y)
+          : { changed: false, message: '请先选择住宅地块' };
+    this.statusText = result.message;
+    if (result.changed) {
+      this.vibrate('light');
+      this.save();
+    }
+  }
+
   private colorForTile(tile: Tile): string {
     if (tile.terrain === TerrainType.Water) return '#2677c9';
     switch (tile.zone) {
@@ -356,7 +470,7 @@ class WeChatCityGame {
     return { x: Math.floor(tx), y: Math.floor(ty) };
   }
 
-  private pointInRect(x: number, y: number, rect: ToolButton): boolean {
+  private pointInRect(x: number, y: number, rect: { x: number; y: number; width: number; height: number }): boolean {
     return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
   }
 
@@ -370,47 +484,35 @@ class WeChatCityGame {
     this.ctx.closePath();
   }
 
-  private createSaveData(): CitySaveData {
-    const tiles: CitySaveData['tiles'] = [];
-    for (let y = 0; y < this.sim.grid.height; y++) {
-      for (let x = 0; x < this.sim.grid.width; x++) {
-        const tile = this.sim.grid.getTile(x, y);
-        if (!tile) continue;
-        if (tile.zone !== ZoneType.None || tile.roadId || tile.buildingId) {
-          tiles.push({ x, y, zone: tile.zone, roadId: tile.roadId, buildingId: tile.buildingId });
-        }
-      }
-    }
-
-    return {
-      version: 1,
-      metrics: { ...this.sim.metrics, alerts: [...this.sim.metrics.alerts], unlockedBuildingIds: [...this.sim.metrics.unlockedBuildingIds] },
-      tiles,
-    };
-  }
-
   private restore(): void {
     const data = this.runtime.getStorageSync?.(SAVE_KEY);
     if (!this.isSaveData(data)) return;
-
-    Object.assign(this.sim.metrics, data.metrics);
-    for (const tile of data.tiles) {
-      this.sim.grid.clearPlanning(tile.x, tile.y);
-      this.sim.grid.setZone(tile.x, tile.y, tile.zone);
-      if (tile.roadId) this.sim.grid.setRoad(tile.x, tile.y, tile.roadId);
-      if (tile.buildingId) this.sim.grid.setBuilding(tile.x, tile.y, tile.buildingId);
-    }
+    this.sim.restoreSnapshot(data);
     this.statusText = '已读取本地城市存档';
   }
 
   private save(): void {
-    this.runtime.setStorageSync?.(SAVE_KEY, this.createSaveData());
+    this.runtime.setStorageSync?.(SAVE_KEY, this.sim.createSnapshot());
   }
 
-  private isSaveData(value: unknown): value is CitySaveData {
+  private isSaveData(value: unknown): value is CitySimulationSaveData {
     if (!value || typeof value !== 'object') return false;
-    const candidate = value as Partial<CitySaveData>;
-    return candidate.version === 1 && Array.isArray(candidate.tiles) && typeof candidate.metrics === 'object';
+    const candidate = value as Partial<CitySimulationSaveData>;
+    return (candidate.version === 1 || candidate.version === 2)
+      && Array.isArray(candidate.tiles)
+      && typeof candidate.metrics === 'object';
+  }
+
+  private materialLine(): string {
+    return (Object.keys(MATERIAL_LABELS) as MaterialId[])
+      .map((materialId) => `${MATERIAL_LABELS[materialId]}${this.sim.materials[materialId]}`)
+      .join(' ');
+  }
+
+  private formatCost(cost: MaterialCost): string {
+    return (Object.entries(cost) as Array<[MaterialId, number]>)
+      .map(([materialId, count]) => `${MATERIAL_LABELS[materialId]}x${count}`)
+      .join('、');
   }
 
   private vibrate(type: 'light' | 'medium' | 'heavy'): void {

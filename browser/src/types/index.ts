@@ -29,6 +29,16 @@ export type PlanningTool =
   | 'commercial'
   | 'industrial'
   | 'erase';
+export type MaterialId = 'wood' | 'metal' | 'plastic';
+export type CityMaterialInventory = Record<MaterialId, number>;
+export type MaterialCost = Partial<Record<MaterialId, number>>;
+export interface ProductionJob {
+  id: string; materialId: MaterialId; label: string;
+  remainingDays: number; totalDays: number;
+}
+export interface CityOrder {
+  id: string; title: string; required: MaterialCost; rewardCash: number;
+}
 export interface GridPos { x: number; y: number }
 export interface BuildingDefinition {
   id: string; name: string; category: BuildingCategory;
