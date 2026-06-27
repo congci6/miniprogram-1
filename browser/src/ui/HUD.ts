@@ -3,9 +3,12 @@ import {
   CityMetrics,
   CityObjective,
   CityOrder,
+  CityUnlockActionId,
+  CityUnlockState,
   MaterialId,
   PlanningTool,
   ProductionJob,
+  ServiceBuildingId,
   TerrainType,
   ZoneType,
 } from '@/types/index';
@@ -33,6 +36,11 @@ const SERVICE_BUILDING_LABELS: Record<string, string> = {
   community_park: '社区公园',
   community_clinic: '社区诊所',
   community_school: '社区学校',
+};
+const SERVICE_TOOL_TO_BUILDING: Partial<Record<PlanningTool, ServiceBuildingId>> = {
+  park: 'community_park',
+  clinic: 'community_clinic',
+  school: 'community_school',
 };
 
 const ROAD_LABELS: Record<string, string> = {
@@ -74,6 +82,7 @@ export class HUD {
   private orders: CityOrder[] = [];
   private completedOrders = 0;
   private objectives: CityObjective[] = [];
+  private unlockState: CityUnlockState | null = null;
   private buttons = new Map<PlanningTool, HTMLButtonElement>();
 
   constructor() {
@@ -145,6 +154,7 @@ export class HUD {
       this.orders = e.detail.orders ?? this.orders;
       this.completedOrders = e.detail.completedOrders ?? this.completedOrders;
       this.objectives = e.detail.objectives ?? this.objectives;
+      this.unlockState = e.detail.unlockState ?? this.unlockState;
       this.update(e.detail.metrics);
     }) as EventListener);
 
@@ -216,6 +226,11 @@ export class HUD {
     const productionText = this.productionQueue.length
       ? this.productionQueue.map((job) => `${job.label} ${job.remainingDays}/${job.totalDays}天`).join('<br>')
       : '生产队列空闲';
+    const residentialUpgrade = this.selectedResidentialUpgradeAction();
+    const residentialUpgradeEntry = residentialUpgrade ? this.unlockState?.actions[residentialUpgrade] : null;
+    const roadUpgradeEntry = this.unlockState?.actions.roadUpgrade ?? null;
+    const residentialUpgradeLocked = residentialUpgradeEntry ? !residentialUpgradeEntry.unlocked : false;
+    const roadUpgradeLocked = roadUpgradeEntry ? !roadUpgradeEntry.unlocked : false;
 
     this.managementPanel.innerHTML =
       '<strong>仓库</strong> ' + this.storageUsed + '/' + this.storageCapacity + '<br>' +
@@ -232,8 +247,8 @@ export class HUD {
       '<br><strong>城市目标</strong><br>' +
       this.objectives.map((objective) => this.objectiveHtml(objective)).join('') +
       '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' +
-      '<button data-action="upgrade" style="' + this.actionButtonStyle('#6ea85f') + '">升级选中住宅</button>' +
-      '<button data-action="upgrade-road" style="' + this.actionButtonStyle('#3f5f82') + '">升级选中道路</button>' +
+      '<button data-action="upgrade" ' + this.disabledAttribute(residentialUpgradeLocked) + ' style="' + this.actionButtonStyle('#6ea85f', residentialUpgradeLocked) + '">升级选中住宅' + this.lockSuffix(residentialUpgradeEntry) + '</button>' +
+      '<button data-action="upgrade-road" ' + this.disabledAttribute(roadUpgradeLocked) + ' style="' + this.actionButtonStyle('#3f5f82', roadUpgradeLocked) + '">升级选中道路' + this.lockSuffix(roadUpgradeEntry) + '</button>' +
       '</div>';
 
     this.managementPanel.querySelectorAll<HTMLButtonElement>('button[data-material]').forEach((button) => {
@@ -254,8 +269,10 @@ export class HUD {
   }
 
   private productionButtonHtml(materialId: MaterialId): string {
-    return '<button data-material="' + materialId + '" style="' + this.actionButtonStyle('#263239') + '">' +
-      MATERIAL_LABELS[materialId] +
+    const unlockEntry = this.unlockState?.materials[materialId] ?? null;
+    const locked = unlockEntry ? !unlockEntry.unlocked : false;
+    return '<button data-material="' + materialId + '" ' + this.disabledAttribute(locked) + ' style="' + this.actionButtonStyle('#263239', locked) + '">' +
+      MATERIAL_LABELS[materialId] + this.lockSuffix(unlockEntry) +
       '</button>';
   }
 
@@ -276,9 +293,10 @@ export class HUD {
       '</div>';
   }
 
-  private actionButtonStyle(background: string): string {
+  private actionButtonStyle(background: string, locked = false): string {
     return 'height:28px;border:1px solid rgba(255,255,255,0.16);border-radius:5px;' +
-      'background:' + background + ';color:#edf7ef;font-size:12px;cursor:pointer;padding:0 8px;';
+      'background:' + (locked ? '#30363a' : background) + ';color:' + (locked ? '#8f9b95' : '#edf7ef') +
+      ';font-size:12px;cursor:' + (locked ? 'not-allowed' : 'pointer') + ';padding:0 8px;opacity:' + (locked ? '0.72' : '1') + ';';
   }
 
   private formatCost(cost: Partial<Record<MaterialId, number>>): string {
@@ -288,17 +306,47 @@ export class HUD {
   }
 
   private residentialLevelLabel(tile: Tile): string {
+    return this.residentialLevel(tile) + '级';
+  }
+
+  private residentialLevel(tile: Tile): number {
     const match = /^residential_l([2-3])$/.exec(tile.buildingId);
-    return match ? match[1] + '级' : '1级';
+    return match ? Number(match[1]) : 1;
+  }
+
+  private selectedResidentialUpgradeAction(): CityUnlockActionId {
+    const nextLevel = this.selectedTile?.zone === ZoneType.Residential
+      ? Math.min(3, this.residentialLevel(this.selectedTile) + 1)
+      : 2;
+    return nextLevel >= 3 ? 'residentialLevel3' : 'residentialLevel2';
+  }
+
+  private serviceToolUnlockEntry(tool: PlanningTool): CityUnlockState['services'][ServiceBuildingId] | null {
+    const serviceBuildingId = SERVICE_TOOL_TO_BUILDING[tool];
+    return serviceBuildingId ? this.unlockState?.services[serviceBuildingId] ?? null : null;
+  }
+
+  private lockSuffix(entry?: { unlockLevel: number; unlocked: boolean } | null): string {
+    return entry && !entry.unlocked ? ' Lv' + entry.unlockLevel : '';
+  }
+
+  private disabledAttribute(locked: boolean): string {
+    return locked ? 'disabled aria-disabled="true"' : '';
   }
 
   private updateButtonState(): void {
     this.buttons.forEach((button, tool) => {
       const selected = tool === this.selectedTool;
-      button.style.background = selected ? '#6ea85f' : '#263239';
-      button.style.color = selected ? '#07100b' : '#edf7ef';
-      button.style.borderColor = selected ? '#b7e39a' : 'rgba(255,255,255,0.14)';
+      const unlockEntry = this.serviceToolUnlockEntry(tool);
+      const locked = unlockEntry ? !unlockEntry.unlocked : false;
+      button.disabled = locked;
+      button.textContent = TOOL_LABELS[tool] + this.lockSuffix(unlockEntry);
+      button.title = locked ? TOOL_LABELS[tool] + ' Lv' + unlockEntry?.unlockLevel + '解锁' : TOOL_LABELS[tool];
+      button.style.background = locked ? '#30363a' : selected ? '#6ea85f' : '#263239';
+      button.style.color = locked ? '#8f9b95' : selected ? '#07100b' : '#edf7ef';
+      button.style.borderColor = locked ? 'rgba(255,255,255,0.08)' : selected ? '#b7e39a' : 'rgba(255,255,255,0.14)';
       button.style.fontWeight = selected ? '700' : '500';
+      button.style.cursor = locked ? 'not-allowed' : 'pointer';
     });
   }
 }

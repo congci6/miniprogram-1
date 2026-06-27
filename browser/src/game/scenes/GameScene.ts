@@ -136,6 +136,7 @@ export class GameScene extends Phaser.Scene {
         orders: this.sim.orders,
         completedOrders: this.sim.completedOrders,
         objectives: this.sim.getObjectives(),
+        unlockState: this.sim.getUnlockState(),
         selectedTool: this.selectedTool,
         message,
       },

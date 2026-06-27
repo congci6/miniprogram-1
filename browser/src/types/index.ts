@@ -47,6 +47,15 @@ export interface CityObjective {
   id: string; title: string; description: string;
   rewardCash: number; rewardExperience: number; completed: boolean;
 }
+export type CityUnlockActionId = 'roadUpgrade' | 'residentialLevel2' | 'residentialLevel3';
+export interface CityUnlockEntry {
+  label: string; unlockLevel: number; unlocked: boolean;
+}
+export interface CityUnlockState {
+  materials: Record<MaterialId, CityUnlockEntry>;
+  services: Record<ServiceBuildingId, CityUnlockEntry>;
+  actions: Record<CityUnlockActionId, CityUnlockEntry>;
+}
 export interface GridPos { x: number; y: number }
 export interface BuildingDefinition {
   id: string; name: string; category: BuildingCategory;

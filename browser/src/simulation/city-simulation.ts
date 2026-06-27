@@ -6,6 +6,7 @@ import {
   CityOrder,
   CityPolicy,
   CityTaxLevel,
+  CityUnlockState,
   MaterialCost,
   MaterialId,
   PlanningTool,
@@ -99,6 +100,7 @@ const SERVICE_LABELS: Record<ServiceBuildingId, string> = {
 interface ServiceBuildingDefinition {
   label: string;
   cashCost: number;
+  unlockLevel: number;
   radius: number;
   jobs: number;
   pollution: number;
@@ -111,6 +113,7 @@ const SERVICE_BUILDINGS: Record<ServiceBuildingId, ServiceBuildingDefinition> = 
   community_park: {
     label: '社区公园',
     cashCost: 420,
+    unlockLevel: 1,
     radius: 3,
     jobs: 2,
     pollution: -1,
@@ -121,6 +124,7 @@ const SERVICE_BUILDINGS: Record<ServiceBuildingId, ServiceBuildingDefinition> = 
   community_clinic: {
     label: '社区诊所',
     cashCost: 620,
+    unlockLevel: 2,
     radius: 4,
     jobs: 10,
     pollution: 0,
@@ -131,6 +135,7 @@ const SERVICE_BUILDINGS: Record<ServiceBuildingId, ServiceBuildingDefinition> = 
   community_school: {
     label: '社区学校',
     cashCost: 680,
+    unlockLevel: 3,
     radius: 4,
     jobs: 12,
     pollution: 1,
@@ -140,10 +145,10 @@ const SERVICE_BUILDINGS: Record<ServiceBuildingId, ServiceBuildingDefinition> = 
   },
 };
 
-const PRODUCTION_RECIPES: Record<MaterialId, { label: string; days: number; cashCost: number }> = {
-  wood: { label: '木材', days: 2, cashCost: 20 },
-  metal: { label: '金属', days: 3, cashCost: 35 },
-  plastic: { label: '塑料', days: 4, cashCost: 55 },
+const PRODUCTION_RECIPES: Record<MaterialId, { label: string; days: number; cashCost: number; unlockLevel: number }> = {
+  wood: { label: '木材', days: 2, cashCost: 20, unlockLevel: 1 },
+  metal: { label: '金属', days: 3, cashCost: 35, unlockLevel: 2 },
+  plastic: { label: '塑料', days: 4, cashCost: 55, unlockLevel: 3 },
 };
 
 const ORDER_TEMPLATES: Array<{ title: string; required: MaterialCost; rewardCash: number }> = [
@@ -183,14 +188,6 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     isMet: (_simulation, stats) => stats.roads >= 1,
   },
   {
-    id: 'first-arterial',
-    title: '升级第一条主干道',
-    description: '把任意道路升级为主干道，提高通行容量',
-    rewardCash: 540,
-    rewardExperience: 45,
-    isMet: (_simulation, stats) => stats.upgradedRoads >= 1,
-  },
-  {
     id: 'first-neighborhood',
     title: '形成第一片社区',
     description: '规划 2 个住宅地块，打开人口增长',
@@ -205,6 +202,14 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     rewardCash: 320,
     rewardExperience: 30,
     isMet: (simulation) => simulation.productionQueue.length > 0 || simulation.getStorageUsed() > 0 || simulation.completedOrders > 0,
+  },
+  {
+    id: 'first-arterial',
+    title: '升级第一条主干道',
+    description: '把任意道路升级为主干道，提高通行容量',
+    rewardCash: 540,
+    rewardExperience: 45,
+    isMet: (_simulation, stats) => stats.upgradedRoads >= 1,
   },
   {
     id: 'first-delivery',
@@ -248,6 +253,11 @@ const ROAD_UPGRADE_COST = 360;
 const ERASE_COST = 20;
 const STORAGE_CAPACITY = 30;
 const MAX_RESIDENTIAL_LEVEL = 3;
+const ROAD_UPGRADE_UNLOCK_LEVEL = 2;
+const RESIDENTIAL_UPGRADE_UNLOCK_LEVELS: Record<number, number> = {
+  2: 2,
+  3: 3,
+};
 const OFFLINE_MS_PER_DAY = 60_000;
 const MAX_OFFLINE_DAYS = 72;
 const ROAD_CAPACITY: Record<string, number> = {
@@ -312,7 +322,7 @@ export class CitySimulation {
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
       rentPressure: 0, housingCapacity: 0, buildingCount: 0,
-      unlockedBuildingIds: ['community_park', 'community_clinic', 'community_school'],
+      unlockedBuildingIds: ['community_park'],
       alerts: [],
     };
   }
@@ -374,6 +384,9 @@ export class CitySimulation {
   startProduction(materialId: MaterialId): PlanningActionResult {
     const recipe = PRODUCTION_RECIPES[materialId];
     if (!recipe) return { changed: false, message: '未知生产配方' };
+    if (!this.isLevelUnlocked(recipe.unlockLevel)) {
+      return { changed: false, message: this.lockedMessage(recipe.label, recipe.unlockLevel) };
+    }
     if (this.productionQueue.length >= this.getProductionSlots()) {
       return { changed: false, message: '生产槽已满，等待工厂完成' };
     }
@@ -420,6 +433,10 @@ export class CitySimulation {
     if (currentLevel >= MAX_RESIDENTIAL_LEVEL) return { changed: false, message: '住宅已达到当前最高等级' };
 
     const nextLevel = currentLevel + 1;
+    const unlockLevel = RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[nextLevel] ?? 1;
+    if (!this.isLevelUnlocked(unlockLevel)) {
+      return { changed: false, message: this.lockedMessage(`住宅 ${nextLevel} 级`, unlockLevel) };
+    }
     const cost = RESIDENTIAL_UPGRADE_COSTS[nextLevel];
     if (!this.hasMaterials(cost)) return { changed: false, message: `升级需要 ${this.formatMaterialCost(cost)}` };
 
@@ -435,6 +452,9 @@ export class CitySimulation {
     if (!tile) return { changed: false, message: '地块不在地图内' };
     if (!tile.roadId) return { changed: false, message: '请选择道路地块升级' };
     if (tile.roadId === 'arterial') return { changed: false, message: '这条道路已经是主干道' };
+    if (!this.isLevelUnlocked(ROAD_UPGRADE_UNLOCK_LEVEL)) {
+      return { changed: false, message: this.lockedMessage('主干道升级', ROAD_UPGRADE_UNLOCK_LEVEL) };
+    }
     if (!this.trySpend(ROAD_UPGRADE_COST)) return { changed: false, message: '现金不足，无法升级道路' };
 
     this.grid.setRoad(x, y, 'arterial');
@@ -478,6 +498,50 @@ export class CitySimulation {
       rewardExperience: objective.rewardExperience,
       completed: this.completedObjectiveIds.has(objective.id),
     }));
+  }
+
+  getUnlockState(): CityUnlockState {
+    const materials = {} as CityUnlockState['materials'];
+    for (const materialId of Object.keys(PRODUCTION_RECIPES) as MaterialId[]) {
+      const recipe = PRODUCTION_RECIPES[materialId];
+      materials[materialId] = {
+        label: recipe.label,
+        unlockLevel: recipe.unlockLevel,
+        unlocked: this.isLevelUnlocked(recipe.unlockLevel),
+      };
+    }
+
+    const services = {} as CityUnlockState['services'];
+    for (const serviceBuildingId of Object.keys(SERVICE_BUILDINGS) as ServiceBuildingId[]) {
+      const service = SERVICE_BUILDINGS[serviceBuildingId];
+      services[serviceBuildingId] = {
+        label: service.label,
+        unlockLevel: service.unlockLevel,
+        unlocked: this.isLevelUnlocked(service.unlockLevel),
+      };
+    }
+
+    return {
+      materials,
+      services,
+      actions: {
+        roadUpgrade: {
+          label: '主干道升级',
+          unlockLevel: ROAD_UPGRADE_UNLOCK_LEVEL,
+          unlocked: this.isLevelUnlocked(ROAD_UPGRADE_UNLOCK_LEVEL),
+        },
+        residentialLevel2: {
+          label: '住宅 2 级',
+          unlockLevel: RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[2],
+          unlocked: this.isLevelUnlocked(RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[2]),
+        },
+        residentialLevel3: {
+          label: '住宅 3 级',
+          unlockLevel: RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[3],
+          unlocked: this.isLevelUnlocked(RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[3]),
+        },
+      },
+    };
   }
 
   createSnapshot(nowMs = Date.now()): CitySimulationSnapshot {
@@ -587,6 +651,9 @@ export class CitySimulation {
     const tile = this.grid.getTile(x, y);
     if (!tile) return { changed: false, message: '地块不在地图内' };
     const service = SERVICE_BUILDINGS[serviceBuildingId];
+    if (!this.isLevelUnlocked(service.unlockLevel)) {
+      return { changed: false, message: this.lockedMessage(service.label, service.unlockLevel) };
+    }
     if (tile.terrain === TerrainType.Water) return { changed: false, message: '水域暂时不能建设服务设施' };
     if (tile.roadId) return { changed: false, message: '道路地块不能建设服务设施' };
     if (tile.zone !== ZoneType.None || tile.buildingId) return { changed: false, message: '请在空地建设服务设施' };
@@ -671,6 +738,16 @@ export class CitySimulation {
     this.metrics.cityExperience = experience;
     this.metrics.cityLevelName = CITY_LEVEL_NAMES[Math.min(level - 1, CITY_LEVEL_NAMES.length - 1)];
     this.metrics.nextLevelExperience = CITY_LEVEL_EXPERIENCE[level] ?? Math.max(experience, CITY_LEVEL_EXPERIENCE[CITY_LEVEL_EXPERIENCE.length - 1]);
+    this.metrics.unlockedBuildingIds = (Object.keys(SERVICE_BUILDINGS) as ServiceBuildingId[])
+      .filter((serviceBuildingId) => this.isLevelUnlocked(SERVICE_BUILDINGS[serviceBuildingId].unlockLevel));
+  }
+
+  private isLevelUnlocked(unlockLevel: number): boolean {
+    return this.metrics.cityLevel >= unlockLevel;
+  }
+
+  private lockedMessage(label: string, unlockLevel: number): string {
+    return `${label}需要城市 Lv${unlockLevel} 解锁`;
   }
 
   private zoneFromTool(tool: PlanningTool): ZoneType {

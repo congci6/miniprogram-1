@@ -1,5 +1,5 @@
 import { CityOfflineProgressResult, CitySimulation, type CitySimulationSaveData } from '@/simulation/city-simulation';
-import { MaterialCost, MaterialId, PlanningTool, TerrainType, ZoneType } from '@/types/index';
+import { CityUnlockActionId, MaterialCost, MaterialId, PlanningTool, ServiceBuildingId, TerrainType, ZoneType } from '@/types/index';
 import type { Tile } from '@/simulation/grid';
 
 declare const wx: WeChatRuntime | undefined;
@@ -42,6 +42,7 @@ interface ToolButton {
 interface ActionButton {
   kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad';
   label: string;
+  lockedMessage?: string;
   x: number;
   y: number;
   width: number;
@@ -68,6 +69,11 @@ const TOOL_LABELS: Record<PlanningTool, string> = {
   erase: '清理',
 };
 const TOOLS: PlanningTool[] = ['inspect', 'road', 'residential', 'commercial', 'industrial', 'park', 'clinic', 'school', 'erase'];
+const SERVICE_TOOL_TO_BUILDING: Partial<Record<PlanningTool, ServiceBuildingId>> = {
+  park: 'community_park',
+  clinic: 'community_clinic',
+  school: 'community_school',
+};
 const ZONE_LABELS: Record<ZoneType, string> = {
   [ZoneType.None]: '未规划',
   [ZoneType.Residential]: '住宅',
@@ -178,6 +184,12 @@ class WeChatCityGame {
     if (allowToolSwitch) {
       const button = this.buttons.find((candidate) => this.pointInRect(x, y, candidate));
       if (button) {
+        const lockedMessage = this.toolLockedMessage(button.tool);
+        if (lockedMessage) {
+          this.statusText = lockedMessage;
+          this.vibrate('light');
+          return;
+        }
         this.selectedTool = button.tool;
         this.statusText = `当前工具: ${button.label}`;
         this.vibrate('light');
@@ -186,6 +198,11 @@ class WeChatCityGame {
 
       const actionButton = this.actionButtons.find((candidate) => this.pointInRect(x, y, candidate));
       if (actionButton) {
+        if (actionButton.lockedMessage) {
+          this.statusText = actionButton.lockedMessage;
+          this.vibrate('light');
+          return;
+        }
         this.handleAction(actionButton);
         return;
       }
@@ -370,12 +387,13 @@ class WeChatCityGame {
     lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 18));
 
     this.actionButtons.forEach((button) => {
-      this.ctx.fillStyle = button.kind === 'upgrade' ? '#6ea85f' : '#263239';
+      const locked = Boolean(button.lockedMessage);
+      this.ctx.fillStyle = locked ? '#30363a' : button.kind === 'upgrade' ? '#6ea85f' : '#263239';
       this.roundRect(button.x, button.y, button.width, button.height, 5);
       this.ctx.fill();
       this.ctx.strokeStyle = 'rgba(255,255,255,0.16)';
       this.ctx.stroke();
-      this.ctx.fillStyle = button.kind === 'upgrade' ? '#07100b' : '#edf7ef';
+      this.ctx.fillStyle = locked ? '#8f9b95' : button.kind === 'upgrade' ? '#07100b' : '#edf7ef';
       this.ctx.font = '12px sans-serif';
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
@@ -385,18 +403,22 @@ class WeChatCityGame {
   }
 
   private drawToolBar(): void {
+    const unlockState = this.sim.getUnlockState();
     this.buttons.forEach((button) => {
       const selected = button.tool === this.selectedTool;
-      this.ctx.fillStyle = selected ? '#6ea85f' : '#263239';
+      const serviceBuildingId = SERVICE_TOOL_TO_BUILDING[button.tool];
+      const unlockEntry = serviceBuildingId ? unlockState.services[serviceBuildingId] : null;
+      const locked = unlockEntry ? !unlockEntry.unlocked : false;
+      this.ctx.fillStyle = locked ? '#30363a' : selected ? '#6ea85f' : '#263239';
       this.roundRect(button.x, button.y, button.width, button.height, 5);
       this.ctx.fill();
-      this.ctx.strokeStyle = selected ? '#b7e39a' : 'rgba(255,255,255,0.18)';
+      this.ctx.strokeStyle = locked ? 'rgba(255,255,255,0.08)' : selected ? '#b7e39a' : 'rgba(255,255,255,0.18)';
       this.ctx.stroke();
-      this.ctx.fillStyle = selected ? '#07100b' : '#edf7ef';
+      this.ctx.fillStyle = locked ? '#8f9b95' : selected ? '#07100b' : '#edf7ef';
       this.ctx.font = `${selected ? 'bold ' : ''}13px sans-serif`;
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(button.label, button.x + button.width / 2, button.y + button.height / 2);
+      this.ctx.fillText(button.label + this.lockSuffix(unlockEntry), button.x + button.width / 2, button.y + button.height / 2);
       this.ctx.textAlign = 'left';
     });
   }
@@ -432,11 +454,14 @@ class WeChatCityGame {
     const y = 176;
     const width = 48;
     const gap = 6;
+    const unlockState = this.sim.getUnlockState();
     (Object.keys(MATERIAL_LABELS) as MaterialId[]).forEach((materialId, index) => {
+      const unlockEntry = unlockState.materials[materialId];
       this.actionButtons.push({
         kind: 'produce',
         materialId,
-        label: MATERIAL_LABELS[materialId],
+        label: MATERIAL_LABELS[materialId] + this.lockSuffix(unlockEntry),
+        lockedMessage: unlockEntry.unlocked ? undefined : this.lockedMessage(unlockEntry.label, unlockEntry.unlockLevel),
         x: x + index * (width + gap),
         y,
         width,
@@ -452,22 +477,51 @@ class WeChatCityGame {
       width: 74,
       height: 28,
     });
+    const residentialUpgrade = unlockState.actions[this.selectedResidentialUpgradeAction()];
     this.actionButtons.push({
       kind: 'upgrade',
-      label: '升级住宅',
+      label: '升级住宅' + this.lockSuffix(residentialUpgrade),
+      lockedMessage: residentialUpgrade.unlocked ? undefined : this.lockedMessage(residentialUpgrade.label, residentialUpgrade.unlockLevel),
       x: x + 82,
       y: y + 36,
       width: 86,
       height: 28,
     });
+    const roadUpgrade = unlockState.actions.roadUpgrade;
     this.actionButtons.push({
       kind: 'upgradeRoad',
-      label: '升道路',
+      label: '升道路' + this.lockSuffix(roadUpgrade),
+      lockedMessage: roadUpgrade.unlocked ? undefined : this.lockedMessage(roadUpgrade.label, roadUpgrade.unlockLevel),
       x: x + 176,
       y: y + 36,
       width: 66,
       height: 28,
     });
+  }
+
+  private selectedResidentialUpgradeAction(): CityUnlockActionId {
+    const nextLevel = this.selectedTile?.zone === ZoneType.Residential
+      ? Math.min(3, this.sim.getResidentialLevel(this.selectedTile) + 1)
+      : 2;
+    return nextLevel >= 3 ? 'residentialLevel3' : 'residentialLevel2';
+  }
+
+  private serviceToolUnlockEntry(tool: PlanningTool): { label: string; unlockLevel: number; unlocked: boolean } | null {
+    const serviceBuildingId = SERVICE_TOOL_TO_BUILDING[tool];
+    return serviceBuildingId ? this.sim.getUnlockState().services[serviceBuildingId] : null;
+  }
+
+  private toolLockedMessage(tool: PlanningTool): string {
+    const unlockEntry = this.serviceToolUnlockEntry(tool);
+    return unlockEntry && !unlockEntry.unlocked ? this.lockedMessage(unlockEntry.label, unlockEntry.unlockLevel) : '';
+  }
+
+  private lockSuffix(entry?: { unlockLevel: number; unlocked: boolean } | null): string {
+    return entry && !entry.unlocked ? `Lv${entry.unlockLevel}` : '';
+  }
+
+  private lockedMessage(label: string, unlockLevel: number): string {
+    return `${label}需要城市 Lv${unlockLevel} 解锁`;
   }
 
   private handleAction(button: ActionButton): void {
