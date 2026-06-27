@@ -272,6 +272,10 @@ export class HUD {
       ' / ' + (this.metrics?.budgetFocus ?? '稳定') +
       ' / ' + (this.metrics?.budgetDriver ?? '月度现金流稳定') +
       ' -> ' + (this.metrics?.budgetAction ?? '保持现金缓冲') + '</span><br><br>' +
+      '<span style="color:#bee7b8">经济: ' + (this.metrics?.economicSpecializationScore ?? 0) +
+      ' / ' + (this.metrics?.economicSpecializationFocus ?? '起步') +
+      ' / ' + (this.metrics?.economicSpecializationDriver ?? '等待住商工片区成形') +
+      ' -> ' + (this.metrics?.economicSpecializationAction ?? '先接路规划住宅') + '</span><br><br>' +
       '<span style="color:#c7dcff">优先级: ' + (this.metrics?.districtPriorityScore ?? 0) +
       ' / ' + (this.metrics?.districtPriorityFocus ?? '起步') +
       ' / ' + (this.metrics?.districtPriorityDriver ?? '等待首个片区成形') +

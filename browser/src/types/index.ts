@@ -76,6 +76,7 @@ export interface CityMetrics {
   demandFocus: string; demandDriver: string; demandAction: string; demandUrgency: number;
   forecastRisk: number; forecastFocus: string; forecastAction: string; cashRunwayDays: number;
   budgetStress: number; budgetFocus: string; budgetDriver: string; budgetAction: string;
+  economicSpecializationScore: number; economicSpecializationFocus: string; economicSpecializationDriver: string; economicSpecializationAction: string;
   districtPriorityScore: number; districtPriorityFocus: string; districtPriorityDriver: string; districtPriorityAction: string;
   housingAffordabilityScore: number; housingAffordabilityFocus: string; housingAffordabilityDriver: string; housingAffordabilityAction: string;
   buildingUpgradeReadinessScore: number; buildingUpgradeReadyCount: number; buildingUpgradeBlockedCount: number;

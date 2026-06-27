@@ -70,6 +70,13 @@ interface BudgetBreakdownAdvisor {
   action: string;
 }
 
+interface EconomicSpecializationAdvisor {
+  score: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 interface DistrictPriorityAdvisor {
   score: number;
   focus: string;
@@ -414,6 +421,10 @@ export class CitySimulation {
       budgetFocus: '稳定',
       budgetDriver: '月度现金流稳定',
       budgetAction: '保留现金缓冲',
+      economicSpecializationScore: 0,
+      economicSpecializationFocus: '起步',
+      economicSpecializationDriver: '等待住商工片区成形',
+      economicSpecializationAction: '先接路规划住宅',
       districtPriorityScore: 0,
       districtPriorityFocus: '起步',
       districtPriorityDriver: '等待首个片区成形',
@@ -1114,6 +1125,7 @@ export class CitySimulation {
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
     const forecast = this.createRiskForecast(stats, budget.net);
     const budgetAdvisor = this.createBudgetBreakdownAdvisor(budget);
+    const economicAdvisor = this.createEconomicSpecializationAdvisor(stats, demand, roadCoverage, congestion, pollution, landValue);
     const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
@@ -1123,6 +1135,10 @@ export class CitySimulation {
     this.metrics.budgetFocus = budgetAdvisor.focus;
     this.metrics.budgetDriver = budgetAdvisor.driver;
     this.metrics.budgetAction = budgetAdvisor.action;
+    this.metrics.economicSpecializationScore = economicAdvisor.score;
+    this.metrics.economicSpecializationFocus = economicAdvisor.focus;
+    this.metrics.economicSpecializationDriver = economicAdvisor.driver;
+    this.metrics.economicSpecializationAction = economicAdvisor.action;
     this.metrics.districtPriorityScore = districtAdvisor.score;
     this.metrics.districtPriorityFocus = districtAdvisor.focus;
     this.metrics.districtPriorityDriver = districtAdvisor.driver;
@@ -1408,6 +1424,110 @@ export class CitySimulation {
         ? `${topExpense.focus}支出$${topExpense.amount}，月净现金$${budget.net}`
         : `${topExpense.focus}是最大支出$${topExpense.amount}`,
       action: topExpense.action,
+    };
+  }
+
+  private createEconomicSpecializationAdvisor(
+    stats: GridStats,
+    demand: DemandAnalysis,
+    roadCoverage: number,
+    congestion: number,
+    pollution: number,
+    landValue: number,
+  ): EconomicSpecializationAdvisor {
+    const population = this.metrics.population;
+    const storageUsed = this.getStorageUsed();
+    const storageLoad = storageUsed / STORAGE_CAPACITY;
+    const targetJobs = Math.floor(population * 0.45);
+    const jobGap = Math.max(0, targetJobs - stats.jobs);
+    const orderMomentum = Math.min(22, this.orders.length * 5 + this.completedOrders * 3);
+    const productionMomentum = Math.min(18, this.productionQueue.length * 6 + storageUsed * 0.8);
+    const foundationScore = stats.roads === 0
+      ? 72
+      : stats.housingCapacity === 0
+        ? 68
+        : stats.zonedTiles === 0
+          ? 58
+          : roadCoverage < 45
+            ? Math.round(62 - roadCoverage * 0.35)
+            : 0;
+    const industrialScore = this.clampPercent(
+      demand.industrial * 0.5
+      + Math.min(28, jobGap * 1.15)
+      + (stats.industrialTiles === 0 && stats.residentialTiles > 0 ? 18 : 0)
+      + Math.min(12, roadCoverage * 0.12)
+      + productionMomentum * 0.4
+      - pollution * 0.2,
+    );
+    const commercialScore = this.clampPercent(
+      demand.commercial * 0.52
+      + Math.min(24, population * 0.22)
+      + landValue * 0.18
+      + roadCoverage * 0.08
+      - congestion * 0.22,
+    );
+    const logisticsScore = this.clampPercent(
+      orderMomentum
+      + productionMomentum
+      + storageLoad * 35
+      + Math.min(18, stats.industrialTiles * 8)
+      + (demand.industrial >= 55 ? 10 : 0)
+      - (roadCoverage < 45 ? 14 : 0),
+    );
+
+    const candidates = [
+      {
+        score: foundationScore,
+        focus: '增长底盘',
+        driver: stats.roads === 0
+          ? '尚无道路骨架'
+          : stats.housingCapacity === 0
+            ? '尚无可入住住宅容量'
+            : `道路覆盖${Math.round(roadCoverage)}%`,
+        action: stats.roads === 0
+          ? '先铺第一段道路'
+          : stats.housingCapacity === 0
+            ? '接路规划住宅片区'
+            : '补道路接入分区',
+      },
+      {
+        score: industrialScore,
+        focus: '资源工业',
+        driver: `工业需求${demand.industrial} 岗位缺口${jobGap}`,
+        action: pollution > 50
+          ? '分散工业并补公园'
+          : roadCoverage < 55
+            ? '补道路接工业区'
+            : '远离住宅扩工业并排产材料',
+      },
+      {
+        score: commercialScore,
+        focus: '邻里商业',
+        driver: `商业需求${demand.commercial} 地价${Math.round(landValue)}`,
+        action: congestion > 35 ? '升级商业动线瓶颈' : '在住宅旁补商业区',
+      },
+      {
+        score: logisticsScore,
+        focus: '订单物流',
+        driver: `订单${this.orders.length} 仓库${storageUsed}/${STORAGE_CAPACITY}`,
+        action: storageUsed >= STORAGE_CAPACITY ? '交付订单释放仓库' : '按订单排产并优先交付',
+      },
+    ].sort((a, b) => b.score - a.score)[0];
+
+    if (candidates.score < 35) {
+      return {
+        score: Math.round(candidates.score),
+        focus: '均衡',
+        driver: '住商工供需暂无明显倾向',
+        action: '按需求补片区并交付订单',
+      };
+    }
+
+    return {
+      score: Math.round(Math.min(100, candidates.score)),
+      focus: candidates.focus,
+      driver: candidates.driver,
+      action: candidates.action,
     };
   }
 
