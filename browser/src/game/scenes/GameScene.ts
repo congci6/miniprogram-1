@@ -1,7 +1,7 @@
 import * as Phaser from 'phaser';
 import { CityOfflineProgressResult, CitySimulation, CitySimulationSaveData } from '@/simulation/city-simulation';
 import { IsometricRenderer } from '@/game/view/iso-renderer';
-import { MaterialId, PlanningTool } from '@/types/index';
+import { CityTaxLevel, MaterialId, PlanningTool } from '@/types/index';
 
 const BROWSER_SAVE_KEY = 'pocket-city-planner-browser-save';
 const MATERIAL_LABELS: Record<MaterialId, string> = {
@@ -44,6 +44,12 @@ export class GameScene extends Phaser.Scene {
     window.addEventListener('city-order-fulfill', ((event: Event) => {
       const orderId = (event as CustomEvent<{ orderId: string }>).detail.orderId;
       const result = this.sim.fulfillOrder(orderId);
+      if (result.changed) this.save();
+      this.publishMetrics(result.message);
+    }) as EventListener);
+    window.addEventListener('city-tax-level-change', ((event: Event) => {
+      const level = (event as CustomEvent<{ level: CityTaxLevel }>).detail.level;
+      const result = this.sim.setTaxLevel(level);
       if (result.changed) this.save();
       this.publishMetrics(result.message);
     }) as EventListener);

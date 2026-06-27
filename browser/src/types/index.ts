@@ -70,7 +70,7 @@ export interface CityMetrics {
   day: number; population: number; cash: number;
   happiness: number; cityScore: number;
   cityLevel: number; cityExperience: number; nextLevelExperience: number;
-  cityLevelName: string; taxRatePercent: number;
+  cityLevelName: string; taxLevel: CityTaxLevel; taxRatePercent: number;
   congestion: number; pollution: number; crime: number;
   healthCoverage: number; educationCoverage: number;
   safetyCoverage: number; securityCoverage: number;

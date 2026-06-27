@@ -317,7 +317,7 @@ export class CitySimulation {
       day: 1, population: 0, cash: 50000, happiness: 50,
       cityScore: 50, cityLevel: 1, cityExperience: 0,
       nextLevelExperience: CITY_LEVEL_EXPERIENCE[1], cityLevelName: CITY_LEVEL_NAMES[0],
-      taxRatePercent: 9, congestion: 0, pollution: 0, crime: 0,
+      taxLevel: CityTaxLevel.Normal, taxRatePercent: 9, congestion: 0, pollution: 0, crime: 0,
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
@@ -585,6 +585,10 @@ export class CitySimulation {
 
     Object.assign(this.metrics, snapshot.metrics);
     this.metrics.cityExperience = Math.max(0, this.metrics.cityExperience ?? 0);
+    this.taxLevel = this.isTaxLevel(snapshot.metrics.taxLevel)
+      ? snapshot.metrics.taxLevel
+      : this.taxLevelFromRate(snapshot.metrics.taxRatePercent);
+    this.metrics.taxLevel = this.taxLevel;
     this.refreshCityLevelProgress();
     if (snapshot.version === 2 || snapshot.version === 3) {
       this.materials.wood = Math.max(0, snapshot.materials.wood ?? 0);
@@ -630,6 +634,15 @@ export class CitySimulation {
   getTaxRevenue(): number {
     const rate = this.getTaxRatePercent();
     return Math.floor(this.metrics.population * rate * 0.16);
+  }
+
+  setTaxLevel(level: CityTaxLevel): PlanningActionResult {
+    if (!this.isTaxLevel(level)) return { changed: false, message: '未知税率档位' };
+    if (this.taxLevel === level) return { changed: false, message: `税率已是 ${this.getTaxRatePercent()}%` };
+
+    this.taxLevel = level;
+    this.computeMetrics();
+    return { changed: true, message: `税率调整为 ${this.getTaxRatePercent()}%` };
   }
 
   private trySpend(amount: number): boolean {
@@ -858,6 +871,7 @@ export class CitySimulation {
     this.metrics.educationCoverage = educationCoverage;
     this.metrics.serviceGapPressure = serviceGapPressure;
     this.metrics.rentPressure = rentPressure;
+    this.metrics.taxLevel = this.taxLevel;
     this.metrics.taxRatePercent = this.getTaxRatePercent();
     this.metrics.landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
     this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 - pollution * 0.22 - rentPressure * 0.2)));
@@ -972,6 +986,16 @@ export class CitySimulation {
     if (this.taxLevel === CityTaxLevel.High) return 12;
     if (this.taxLevel === CityTaxLevel.Low) return 6;
     return 9;
+  }
+
+  private isTaxLevel(value: unknown): value is CityTaxLevel {
+    return value === CityTaxLevel.Low || value === CityTaxLevel.Normal || value === CityTaxLevel.High;
+  }
+
+  private taxLevelFromRate(rate: number | undefined): CityTaxLevel {
+    if (rate === 6) return CityTaxLevel.Low;
+    if (rate === 12) return CityTaxLevel.High;
+    return CityTaxLevel.Normal;
   }
 
   private ensureOrders(): void {

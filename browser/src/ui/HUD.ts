@@ -3,6 +3,7 @@ import {
   CityMetrics,
   CityObjective,
   CityOrder,
+  CityTaxLevel,
   CityUnlockActionId,
   CityUnlockState,
   MaterialId,
@@ -30,6 +31,12 @@ const MATERIAL_LABELS: Record<MaterialId, string> = {
   wood: '木材',
   metal: '金属',
   plastic: '塑料',
+};
+
+const TAX_LABELS: Record<CityTaxLevel, string> = {
+  [CityTaxLevel.Low]: '低税',
+  [CityTaxLevel.Normal]: '标准',
+  [CityTaxLevel.High]: '高税',
 };
 
 const SERVICE_BUILDING_LABELS: Record<string, string> = {
@@ -74,6 +81,7 @@ export class HUD {
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: Tile | null = null;
   private selectedMessage = '';
+  private metrics: CityMetrics | null = null;
   private materials: CityMaterialInventory = { wood: 0, metal: 0, plastic: 0 };
   private productionQueue: ProductionJob[] = [];
   private productionSlots = 1;
@@ -169,6 +177,7 @@ export class HUD {
   }
 
   private update(m: CityMetrics): void {
+    this.metrics = m;
     this.topBar.innerHTML =
       '<span>第 ' + m.day + ' 天 / Lv ' + m.cityLevel + '</span>' +
       '<span>人口: ' + m.population.toLocaleString() + '</span>' +
@@ -213,6 +222,7 @@ export class HUD {
       '住房容量: ' + metrics.housingCapacity.toLocaleString() + '<br>' +
       '已开发地块: ' + metrics.buildingCount + '<br>' +
       '道路覆盖: ' + Math.round(metrics.roadCoverage) + '%<br>' +
+      '税率: ' + metrics.taxRatePercent + '%<br>' +
       '服务覆盖: 园' + Math.round(metrics.parkCoverage) + '% / 医' + Math.round(metrics.healthCoverage) + '% / 学' + Math.round(metrics.educationCoverage) + '%<br>' +
       '污染: ' + Math.round(metrics.pollution) + ' / 拥堵: ' + Math.round(metrics.congestion) +
       tileText +
@@ -231,8 +241,16 @@ export class HUD {
     const roadUpgradeEntry = this.unlockState?.actions.roadUpgrade ?? null;
     const residentialUpgradeLocked = residentialUpgradeEntry ? !residentialUpgradeEntry.unlocked : false;
     const roadUpgradeLocked = roadUpgradeEntry ? !roadUpgradeEntry.unlocked : false;
+    const currentTaxLevel = this.metrics?.taxLevel ?? CityTaxLevel.Normal;
+    const taxRatePercent = this.metrics?.taxRatePercent ?? 9;
 
     this.managementPanel.innerHTML =
+      '<strong>财政</strong> 税率 ' + taxRatePercent + '%<br>' +
+      '<div style="margin:6px 0;display:flex;gap:6px;flex-wrap:wrap">' +
+      this.taxButtonHtml(CityTaxLevel.Low, currentTaxLevel) +
+      this.taxButtonHtml(CityTaxLevel.Normal, currentTaxLevel) +
+      this.taxButtonHtml(CityTaxLevel.High, currentTaxLevel) +
+      '</div>' +
       '<strong>仓库</strong> ' + this.storageUsed + '/' + this.storageCapacity + '<br>' +
       inventoryText + '<br><br>' +
       '<strong>工厂</strong> ' + this.productionQueue.length + '/' + this.productionSlots + '<br>' +
@@ -262,6 +280,12 @@ export class HUD {
         window.dispatchEvent(new CustomEvent('city-order-fulfill', { detail: { orderId: button.dataset.order } }));
       });
     });
+    this.managementPanel.querySelectorAll<HTMLButtonElement>('button[data-tax-level]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const level = Number(button.dataset.taxLevel) as CityTaxLevel;
+        window.dispatchEvent(new CustomEvent('city-tax-level-change', { detail: { level } }));
+      });
+    });
     this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade"]')
       ?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('city-upgrade-selected-residential')));
     this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade-road"]')
@@ -273,6 +297,13 @@ export class HUD {
     const locked = unlockEntry ? !unlockEntry.unlocked : false;
     return '<button data-material="' + materialId + '" ' + this.disabledAttribute(locked) + ' style="' + this.actionButtonStyle('#263239', locked) + '">' +
       MATERIAL_LABELS[materialId] + this.lockSuffix(unlockEntry) +
+      '</button>';
+  }
+
+  private taxButtonHtml(level: CityTaxLevel, currentLevel: CityTaxLevel): string {
+    const selected = level === currentLevel;
+    return '<button data-tax-level="' + level + '" style="' + this.actionButtonStyle(selected ? '#6ea85f' : '#263239') + '">' +
+      TAX_LABELS[level] +
       '</button>';
   }
 

@@ -1,5 +1,5 @@
 import { CityOfflineProgressResult, CitySimulation, type CitySimulationSaveData } from '@/simulation/city-simulation';
-import { CityUnlockActionId, MaterialCost, MaterialId, PlanningTool, ServiceBuildingId, TerrainType, ZoneType } from '@/types/index';
+import { CityTaxLevel, CityUnlockActionId, MaterialCost, MaterialId, PlanningTool, ServiceBuildingId, TerrainType, ZoneType } from '@/types/index';
 import type { Tile } from '@/simulation/grid';
 
 declare const wx: WeChatRuntime | undefined;
@@ -40,7 +40,7 @@ interface ToolButton {
 }
 
 interface ActionButton {
-  kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad';
+  kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad' | 'tax';
   label: string;
   lockedMessage?: string;
   x: number;
@@ -49,6 +49,7 @@ interface ActionButton {
   height: number;
   materialId?: MaterialId;
   orderId?: string;
+  taxLevel?: CityTaxLevel;
 }
 
 const RUNTIME_MARKER = 'NON_UNITY_WECHAT_CANVAS_RUNTIME';
@@ -93,6 +94,11 @@ const MATERIAL_LABELS: Record<MaterialId, string> = {
   wood: '木材',
   metal: '金属',
   plastic: '塑料',
+};
+const TAX_LABELS: Record<CityTaxLevel, string> = {
+  [CityTaxLevel.Low]: '低税',
+  [CityTaxLevel.Normal]: '标准',
+  [CityTaxLevel.High]: '高税',
 };
 const SERVICE_BUILDING_LABELS: Record<string, string> = {
   community_park: '社区公园',
@@ -392,7 +398,7 @@ class WeChatCityGame {
     this.ctx.fill();
 
     const lines = [
-      `等级: Lv${m.cityLevel} ${m.cityLevelName}`,
+      `等级: Lv${m.cityLevel} ${m.cityLevelName} 税${m.taxRatePercent}%`,
       `住房容量: ${m.housingCapacity.toLocaleString()}`,
       `已开发地块: ${m.buildingCount}`,
       `道路覆盖: ${Math.round(m.roadCoverage)}%`,
@@ -451,12 +457,14 @@ class WeChatCityGame {
 
     this.actionButtons.forEach((button) => {
       const locked = Boolean(button.lockedMessage);
-      this.ctx.fillStyle = locked ? '#30363a' : button.kind === 'upgrade' ? '#6ea85f' : '#263239';
+      const selectedTax = button.kind === 'tax' && button.taxLevel === this.sim.metrics.taxLevel;
+      const highlighted = button.kind === 'upgrade' || selectedTax;
+      this.ctx.fillStyle = locked ? '#30363a' : highlighted ? '#6ea85f' : '#263239';
       this.roundRect(button.x, button.y, button.width, button.height, 5);
       this.ctx.fill();
       this.ctx.strokeStyle = 'rgba(255,255,255,0.16)';
       this.ctx.stroke();
-      this.ctx.fillStyle = locked ? '#8f9b95' : button.kind === 'upgrade' ? '#07100b' : '#edf7ef';
+      this.ctx.fillStyle = locked ? '#8f9b95' : highlighted ? '#07100b' : '#edf7ef';
       this.ctx.font = '12px sans-serif';
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
@@ -560,6 +568,18 @@ class WeChatCityGame {
       width: 66,
       height: 28,
     });
+    const taxY = y + 72;
+    ([CityTaxLevel.Low, CityTaxLevel.Normal, CityTaxLevel.High] as CityTaxLevel[]).forEach((taxLevel, index) => {
+      this.actionButtons.push({
+        kind: 'tax',
+        taxLevel,
+        label: TAX_LABELS[taxLevel],
+        x: x + index * 62,
+        y: taxY,
+        width: 56,
+        height: 28,
+      });
+    });
   }
 
   private selectedResidentialUpgradeAction(): CityUnlockActionId {
@@ -596,7 +616,9 @@ class WeChatCityGame {
           ? this.sim.upgradeResidentialAt(this.selectedTile.pos.x, this.selectedTile.pos.y)
           : button.kind === 'upgradeRoad' && this.selectedTile
             ? this.sim.upgradeRoadAt(this.selectedTile.pos.x, this.selectedTile.pos.y)
-            : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
+            : button.kind === 'tax' && button.taxLevel !== undefined
+              ? this.sim.setTaxLevel(button.taxLevel)
+              : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
     this.statusText = result.message;
     if (result.changed) {
       this.vibrate('light');

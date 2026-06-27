@@ -115,4 +115,6 @@
 npm run verify
 ```
 
+当前非 Unity Canvas runtime 还包含玩家可控税率管理：浏览器 HUD 和微信 Canvas 管理面板都提供低税、标准和高税档位，并随城市存档恢复。
+
 `npm run verify` 会保留历史源码静态校验，并额外构建非 Unity 微信小游戏入口，确保 `miniprogram/game.js` 不是 Unity 占位文件。
