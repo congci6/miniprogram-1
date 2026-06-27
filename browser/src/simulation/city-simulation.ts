@@ -70,6 +70,13 @@ interface BudgetBreakdownAdvisor {
   action: string;
 }
 
+interface GrowthBottleneckAdvisor {
+  score: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 interface EconomicSpecializationAdvisor {
   score: number;
   focus: string;
@@ -421,6 +428,10 @@ export class CitySimulation {
       budgetFocus: '稳定',
       budgetDriver: '月度现金流稳定',
       budgetAction: '保留现金缓冲',
+      growthBottleneckScore: 0,
+      growthBottleneckFocus: '起步',
+      growthBottleneckDriver: '等待首个成长卡点',
+      growthBottleneckAction: '先接路规划住宅',
       economicSpecializationScore: 0,
       economicSpecializationFocus: '起步',
       economicSpecializationDriver: '等待住商工片区成形',
@@ -1126,6 +1137,18 @@ export class CitySimulation {
     const forecast = this.createRiskForecast(stats, budget.net);
     const budgetAdvisor = this.createBudgetBreakdownAdvisor(budget);
     const economicAdvisor = this.createEconomicSpecializationAdvisor(stats, demand, roadCoverage, congestion, pollution, landValue);
+    const growthAdvisor = this.createGrowthBottleneckAdvisor(
+      stats,
+      demand,
+      forecast,
+      budgetAdvisor,
+      economicAdvisor,
+      serviceAdvisor,
+      roadAdvisor,
+      commuteAdvisor,
+      housingAdvisor,
+      upgradeAdvisor,
+    );
     const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
@@ -1135,6 +1158,10 @@ export class CitySimulation {
     this.metrics.budgetFocus = budgetAdvisor.focus;
     this.metrics.budgetDriver = budgetAdvisor.driver;
     this.metrics.budgetAction = budgetAdvisor.action;
+    this.metrics.growthBottleneckScore = growthAdvisor.score;
+    this.metrics.growthBottleneckFocus = growthAdvisor.focus;
+    this.metrics.growthBottleneckDriver = growthAdvisor.driver;
+    this.metrics.growthBottleneckAction = growthAdvisor.action;
     this.metrics.economicSpecializationScore = economicAdvisor.score;
     this.metrics.economicSpecializationFocus = economicAdvisor.focus;
     this.metrics.economicSpecializationDriver = economicAdvisor.driver;
@@ -1520,6 +1547,121 @@ export class CitySimulation {
         focus: '均衡',
         driver: '住商工供需暂无明显倾向',
         action: '按需求补片区并交付订单',
+      };
+    }
+
+    return {
+      score: Math.round(Math.min(100, candidates.score)),
+      focus: candidates.focus,
+      driver: candidates.driver,
+      action: candidates.action,
+    };
+  }
+
+  private createGrowthBottleneckAdvisor(
+    stats: GridStats,
+    demand: DemandAnalysis,
+    forecast: RiskForecast,
+    budgetAdvisor: BudgetBreakdownAdvisor,
+    economicAdvisor: EconomicSpecializationAdvisor,
+    serviceAdvisor: ServiceGapAdvisor,
+    roadAdvisor: RoadHierarchyAdvisor,
+    commuteAdvisor: CommuteCorridorAdvisor,
+    housingAdvisor: HousingAffordabilityAdvisor,
+    upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
+  ): GrowthBottleneckAdvisor {
+    const storageUsed = this.getStorageUsed();
+    const targetJobs = Math.floor(this.metrics.population * 0.45);
+    const jobGap = Math.max(0, targetJobs - stats.jobs);
+    const foundationScore = stats.roads === 0
+      ? 76
+      : stats.housingCapacity === 0
+        ? 78
+        : stats.developedZoneTiles === 0 && stats.zonedTiles > 0
+          ? 56
+          : 0;
+    const employmentScore = targetJobs === 0 ? 0 : Math.min(100, (jobGap / Math.max(1, targetJobs)) * 100);
+    const storageScore = storageUsed >= STORAGE_CAPACITY ? 82 : Math.round((storageUsed / STORAGE_CAPACITY) * 35);
+    const mobilityScore = Math.max(roadAdvisor.pressure, commuteAdvisor.score);
+    const mobilityAdvisor = roadAdvisor.pressure >= commuteAdvisor.score ? roadAdvisor : commuteAdvisor;
+
+    const candidates = [
+      {
+        score: foundationScore,
+        focus: '起步底盘',
+        driver: stats.roads === 0
+          ? '城市缺少第一段道路'
+          : stats.housingCapacity === 0
+            ? '尚无可入住住宅容量'
+            : '分区已规划但尚未开发',
+        action: stats.roads === 0
+          ? '先铺第一段道路'
+          : stats.housingCapacity === 0
+            ? '接路规划住宅片区'
+            : '保持接路等待自然开发',
+      },
+      {
+        score: forecast.risk,
+        focus: `${forecast.focus}风险`,
+        driver: `${forecast.focus}风险${forecast.risk}`,
+        action: forecast.action,
+      },
+      {
+        score: budgetAdvisor.stress,
+        focus: '财政',
+        driver: budgetAdvisor.driver,
+        action: budgetAdvisor.action,
+      },
+      {
+        score: housingAdvisor.score,
+        focus: '住房',
+        driver: housingAdvisor.driver,
+        action: housingAdvisor.action,
+      },
+      {
+        score: mobilityScore,
+        focus: roadAdvisor.pressure >= commuteAdvisor.score ? '路网' : '通勤',
+        driver: mobilityAdvisor.driver,
+        action: mobilityAdvisor.action,
+      },
+      {
+        score: stats.residentialTiles >= 2 ? serviceAdvisor.score : 0,
+        focus: '服务',
+        driver: serviceAdvisor.driver,
+        action: serviceAdvisor.action,
+      },
+      {
+        score: upgradeAdvisor.readyCount > 0 || upgradeAdvisor.blockedCount > 0 ? upgradeAdvisor.score : 0,
+        focus: '升级',
+        driver: upgradeAdvisor.driver,
+        action: upgradeAdvisor.action,
+      },
+      {
+        score: Math.max(economicAdvisor.score, Math.round(employmentScore)),
+        focus: '经济',
+        driver: jobGap > 0 ? `岗位缺口${jobGap}` : economicAdvisor.driver,
+        action: jobGap > 0 ? '补商业或工业岗位' : economicAdvisor.action,
+      },
+      {
+        score: storageScore,
+        focus: '供应链',
+        driver: `仓库${storageUsed}/${STORAGE_CAPACITY}`,
+        action: storageUsed >= STORAGE_CAPACITY ? '交付订单释放仓库' : '按订单排产补材料',
+      },
+      {
+        score: demand.urgency >= 75 ? demand.urgency : 0,
+        focus: '需求',
+        driver: `${demand.focus}需求${demand.urgency}`,
+        action: demand.action,
+      },
+    ].sort((a, b) => b.score - a.score)[0];
+
+    if (candidates.score < 35) {
+      return {
+        score: Math.round(candidates.score),
+        focus: '顺畅',
+        driver: '暂无明确成长卡点',
+        action: '按目标扩建并保留现金',
       };
     }
 
