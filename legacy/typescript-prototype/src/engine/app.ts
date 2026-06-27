@@ -12,6 +12,7 @@ import { createRuntimeCanvas, getWx, type RuntimeCanvas } from '../platform/wx-c
 import { LocalStorageAdapter } from '../platform/wx-storage';
 import { registerShareEntry } from '../platform/wx-share';
 import { CityState } from '../simulation/city-state';
+import { describeUpgradeReadiness } from '../simulation/upgrade';
 import { previewConstruction, type ConstructionPreview } from '../simulation/construction-preview';
 import { createSave, deserializeSave, serializeSave } from '../simulation/save';
 import { tickCity } from '../simulation/tick';
@@ -86,7 +87,7 @@ export class CityGameApp {
       buildPreview: this.buildPreview,
       toast: this.toast.current(now),
       roadAnchor: this.roadAnchor ? `${this.roadAnchor.x},${this.roadAnchor.y}` : undefined,
-      selectedBuildingLabel: this.selectedBuildingLabel(),
+      selectedBuildingLabels: this.selectedBuildingLabels(),
     });
     this.overlay.render(this.renderer);
 
@@ -283,7 +284,7 @@ export class CityGameApp {
     this.pendingConfirmation = undefined;
   }
 
-  private selectedBuildingLabel(): string | undefined {
+  private selectedBuildingLabels(): string[] | undefined {
     if (!this.selectedPos) {
       return undefined;
     }
@@ -292,7 +293,11 @@ export class CityGameApp {
       return undefined;
     }
     const config = getBuildingConfig(building.configId);
-    return `${config.name} Lv.${building.level + 1}  已发展 ${Math.max(0, Math.floor(this.city.elapsedSeconds - building.placedAt))}s`;
+    const readiness = describeUpgradeReadiness(this.city, building);
+    return [
+      `${config.name} Lv.${building.level + 1}  ??? ${Math.max(0, Math.floor(this.city.elapsedSeconds - building.placedAt))}s`,
+      readiness.ready ? '??????????' : `?????${readiness.detail}`,
+    ];
   }
 
   private rememberUnlockedTools(): void {

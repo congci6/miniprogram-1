@@ -1,9 +1,17 @@
-﻿import { getBuildingConfig, UPGRADE_STAGES } from '../data/buildings';
+import { getBuildingConfig, UPGRADE_STAGES } from '../data/buildings';
 import type { BuildingCategory, BuildingUpgradeStage, PlacedBuilding } from '../types';
 import type { CityState } from './city-state';
 
 const DEFAULT_STAGE = UPGRADE_STAGES[0];
 const GROWTH_CATEGORIES: ReadonlySet<BuildingCategory> = new Set(['residential', 'commercial', 'industrial']);
+
+export type BuildingUpgradeReadiness = {
+  atMax: boolean;
+  ready: boolean;
+  nextLevel?: number;
+  summary: string;
+  detail: string;
+};
 
 export function getStageAtLevel(level: number): BuildingUpgradeStage {
   return UPGRADE_STAGES[Math.min(level, UPGRADE_STAGES.length - 1)] ?? DEFAULT_STAGE;
@@ -18,9 +26,47 @@ export function canNaturallyUpgrade(building: PlacedBuilding): boolean {
   return GROWTH_CATEGORIES.has(getBuildingConfig(building.configId).category);
 }
 
+export function describeUpgradeReadiness(city: CityState, building: PlacedBuilding): BuildingUpgradeReadiness {
+  if (!canNaturallyUpgrade(building)) {
+    return {
+      atMax: true,
+      ready: false,
+      summary: '???????????',
+      detail: '????????????????',
+    };
+  }
+
+  const nextStage = UPGRADE_STAGES[building.level + 1];
+  if (!nextStage) {
+    return {
+      atMax: true,
+      ready: false,
+      summary: '???????',
+      detail: '?????????',
+    };
+  }
+
+  const missing = missingUpgradeConditions(city, building, nextStage);
+  if (missing.length === 0) {
+    return {
+      atMax: false,
+      ready: true,
+      nextLevel: nextStage.level,
+      summary: `?? Lv.${nextStage.level + 1} ????`,
+      detail: '?????????',
+    };
+  }
+
+  return {
+    atMax: false,
+    ready: false,
+    nextLevel: nextStage.level,
+    summary: `???? Lv.${nextStage.level + 1}`,
+    detail: `????${missing.slice(0, 2).join(' / ')}`,
+  };
+}
+
 export function checkBuildingUpgrades(city: CityState): number {
-  const now = city.elapsedSeconds;
-  const metrics = city.metrics;
   let upgraded = 0;
 
   for (const building of city.getBuildings()) {
@@ -33,20 +79,7 @@ export function checkBuildingUpgrades(city: CityState): number {
       continue;
     }
 
-    const age = now - building.placedAt;
-    if (age < nextStage.requiredAgeSeconds) {
-      continue;
-    }
-    if (!building.connectedRoadId) {
-      continue;
-    }
-    if (metrics.serviceCoverage < nextStage.minServiceCoverage * 100) {
-      continue;
-    }
-    if (metrics.happiness < nextStage.minHappiness) {
-      continue;
-    }
-    if (!demandSatisfied(building, metrics.demand, nextStage.minDemand)) {
+    if (missingUpgradeConditions(city, building, nextStage).length > 0) {
       continue;
     }
 
@@ -56,6 +89,30 @@ export function checkBuildingUpgrades(city: CityState): number {
   }
 
   return upgraded;
+}
+
+function missingUpgradeConditions(city: CityState, building: PlacedBuilding, nextStage: BuildingUpgradeStage): string[] {
+  const missing: string[] = [];
+  const age = city.elapsedSeconds - building.placedAt;
+  if (age < nextStage.requiredAgeSeconds) {
+    missing.push(`?? ${Math.floor(age)}/${nextStage.requiredAgeSeconds}s`);
+  }
+  if (!building.connectedRoadId) {
+    missing.push('??');
+  }
+  if (city.metrics.serviceCoverage < nextStage.minServiceCoverage * 100) {
+    missing.push(`?? ${city.metrics.serviceCoverage}/${Math.round(nextStage.minServiceCoverage * 100)}%`);
+  }
+  if (city.metrics.happiness < nextStage.minHappiness) {
+    missing.push(`?? ${Math.round(city.metrics.happiness)}/${nextStage.minHappiness}`);
+  }
+  if (!demandSatisfied(building, city.metrics.demand, nextStage.minDemand)) {
+    const category = getBuildingConfig(building.configId).category;
+    if (category === 'residential') missing.push(`???? ${city.metrics.demand.residential}/${nextStage.minDemand}`);
+    if (category === 'commercial') missing.push(`???? ${city.metrics.demand.commercial}/${nextStage.minDemand}`);
+    if (category === 'industrial') missing.push(`???? ${city.metrics.demand.industrial}/${nextStage.minDemand}`);
+  }
+  return missing;
 }
 
 function demandSatisfied(

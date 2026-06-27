@@ -1,6 +1,7 @@
 ﻿import { describe, expect, it } from 'vitest';
 import { CityState } from '../simulation/city-state';
-import { checkBuildingUpgrades } from '../simulation/upgrade';
+import { buildingUpkeep } from '../simulation/services';
+import { checkBuildingUpgrades, describeUpgradeReadiness } from '../simulation/upgrade';
 
 describe('building upgrades', () => {
   it('upgrades a connected residential building when conditions are met', () => {
@@ -27,5 +28,23 @@ describe('building upgrades', () => {
     expect(upgraded).toBeGreaterThanOrEqual(1);
     expect(after?.level).toBe(1);
     expect(afterLevels.some((level) => level > 0)).toBe(true);
+  });
+
+  it('applies level multipliers to housing capacity and upkeep', () => {
+    const city = CityState.createNew();
+    expect(city.execute({ type: 'PLACE_BUILDING', buildingId: 'residential_pod', pos: { x: 24, y: 29 } }).ok).toBe(true);
+
+    const beforeCapacity = city.metrics.housingCapacity;
+    const beforeUpkeep = buildingUpkeep(city.getBuildings());
+    const target = city.getBuildingAt({ x: 24, y: 29 });
+    expect(target).toBeTruthy();
+
+    city.applyBuildingUpgrade(target!.id, 1);
+    city.recomputeMetrics();
+
+    const readiness = describeUpgradeReadiness(city, city.getBuildingAt({ x: 24, y: 29 })!);
+    expect(readiness.summary.length).toBeGreaterThan(0);
+    expect(city.metrics.housingCapacity).toBeGreaterThan(beforeCapacity);
+    expect(buildingUpkeep(city.getBuildings())).toBeGreaterThan(beforeUpkeep);
   });
 });
