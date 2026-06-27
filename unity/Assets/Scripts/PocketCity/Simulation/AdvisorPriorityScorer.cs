@@ -35,6 +35,87 @@ namespace PocketCity.Simulation
             userActedCount.Clear();
         }
 
+        public AdvisorPrioritySaveData CreateSaveData()
+        {
+            var save = new AdvisorPrioritySaveData();
+            var now = SimulationTime.Time;
+
+            foreach (var pair in lastShownTime)
+            {
+                save.LastShownSecondsAgo.Add(new SavedStringFloatEntry
+                {
+                    Key = pair.Key,
+                    Value = now - pair.Value
+                });
+            }
+
+            foreach (var pair in shownCount)
+            {
+                save.ShownCounts.Add(new SavedStringIntEntry
+                {
+                    Key = pair.Key,
+                    Value = pair.Value
+                });
+            }
+
+            foreach (var pair in userActedCount)
+            {
+                save.UserActedCounts.Add(new SavedStringIntEntry
+                {
+                    Key = pair.Key,
+                    Value = pair.Value
+                });
+            }
+
+            return save;
+        }
+
+        public void ApplySaveData(AdvisorPrioritySaveData save)
+        {
+            ResetState();
+            if (save == null)
+            {
+                return;
+            }
+
+            var now = SimulationTime.Time;
+            if (save.LastShownSecondsAgo != null)
+            {
+                for (var i = 0; i < save.LastShownSecondsAgo.Count; i += 1)
+                {
+                    var entry = save.LastShownSecondsAgo[i];
+                    if (entry != null && !string.IsNullOrEmpty(entry.Key))
+                    {
+                        lastShownTime[entry.Key] = now - entry.Value;
+                    }
+                }
+            }
+
+            if (save.ShownCounts != null)
+            {
+                for (var i = 0; i < save.ShownCounts.Count; i += 1)
+                {
+                    var entry = save.ShownCounts[i];
+                    if (entry != null && !string.IsNullOrEmpty(entry.Key) && entry.Value > 0)
+                    {
+                        shownCount[entry.Key] = entry.Value;
+                    }
+                }
+            }
+
+            if (save.UserActedCounts != null)
+            {
+                for (var i = 0; i < save.UserActedCounts.Count; i += 1)
+                {
+                    var entry = save.UserActedCounts[i];
+                    if (entry != null && !string.IsNullOrEmpty(entry.Key) && entry.Value > 0)
+                    {
+                        userActedCount[entry.Key] = entry.Value;
+                    }
+                }
+            }
+        }
+
         // 记录用户采纳了某个顾问的建议
         public void RecordUserAction(string advisorType)
         {

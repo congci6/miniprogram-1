@@ -113,7 +113,7 @@ namespace PocketCity.Simulation
         {
             var save = new CitySaveData
             {
-                Version = 6,
+                Version = 7,
                 Day = Metrics.Day,
                 Population = Metrics.Population,
                 Cash = Metrics.Cash,
@@ -125,6 +125,7 @@ namespace PocketCity.Simulation
                 DayAccumulator = dayAccumulator,
                 LockedExpansionUnlocked = Metrics.LockedExpansionUnlocked
             };
+            save.AdvisorContext = advisorContext.CreateSaveData();
 
             for (var i = 0; i < roads.Count; i += 1)
             {
@@ -270,6 +271,14 @@ namespace PocketCity.Simulation
                         activePolicies.Add(save.ActivePolicies[i]);
                     }
                 }
+            }
+            if (save.Version >= 7)
+            {
+                advisorContext.ApplySaveData(save.AdvisorContext);
+            }
+            else
+            {
+                advisorContext.Reset();
             }
 
             AddCityEvent("\u8bfb\u53d6\u5b58\u6863\uff1a\u7b2c " + Metrics.Day + " \u5929");

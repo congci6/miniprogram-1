@@ -28,6 +28,7 @@ export type HudState = {
   toast?: string;
   roadAnchor?: string;
   selectedBuildingLabels?: string[];
+  demandAdvisorLabel?: string;
 };
 
 export class HudController {
@@ -87,6 +88,7 @@ export class HudController {
     ctx.textBaseline = 'middle';
     this.drawTopPanel(ctx, state);
     this.drawSelectedBuildingBadge(ctx, state.selectedBuildingLabels);
+    this.drawDemandAdvisorBadge(ctx, state.selectedBuildingLabels, state.demandAdvisorLabel);
     this.drawOverlayBadge(ctx, state.overlayMode);
     if (state.buildPreview) {
       this.drawBuildPreview(ctx, state.buildPreview);
@@ -148,6 +150,25 @@ export class HudController {
     lines.forEach((line, index) => {
       ctx.fillText(line, 24, 170 + index * 15);
     });
+  }
+
+  private drawDemandAdvisorBadge(
+    ctx: CanvasRenderingContext2D,
+    selectedBuildingLabels: string[] | undefined,
+    label: string | undefined,
+  ): void {
+    if (!label) {
+      return;
+    }
+    const y = 156 + (selectedBuildingLabels && selectedBuildingLabels.length > 0 ? 18 + selectedBuildingLabels.length * 16 + 8 : 0);
+    const width = Math.min(420, Math.max(240, label.length * 10));
+    roundedRect(ctx, 12, y, width, 28, 8);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+    ctx.fill();
+    ctx.fillStyle = '#bfdbfe';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'start';
+    ctx.fillText(label, 24, y + 14);
   }
 
   private drawOverlayBadge(ctx: CanvasRenderingContext2D, overlayMode: OverlayMode): void {

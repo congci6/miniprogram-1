@@ -140,8 +140,9 @@ namespace PocketCity.Runtime
                 lastPublishedCityEvent = string.Empty;
                 lastSettlementFeedbackDay = -1;
                 lastExpansionUnlocked = Metrics != null && Metrics.LockedExpansionUnlocked;
-                ResetAdvisorRuntimeSession();
-            }
+                
+                    CityHudViewModelSmartAdvisor.ImportRuntimeState(simulation.AdvisorContext, save.AdvisorPriority);
+
         }
 
         private void Awake()
@@ -529,7 +530,14 @@ namespace PocketCity.Runtime
 
         public string ExportSaveJson()
         {
-            return simulation == null ? string.Empty : JsonUtility.ToJson(simulation.CreateSaveData());
+            if (simulation == null)
+            {
+                return string.Empty;
+            }
+
+            var save = simulation.CreateSaveData();
+            save.AdvisorPriority = CityHudViewModelSmartAdvisor.ExportRuntimeState();
+            return JsonUtility.ToJson(save);
         }
 
         public bool ImportSaveJson(string json)
@@ -552,6 +560,7 @@ namespace PocketCity.Runtime
                     lastSettlementFeedbackDay = -1;
                     lastExpansionUnlocked = Metrics != null && Metrics.LockedExpansionUnlocked;
                     ResetAdvisorRuntimeSession();
+                    CityHudViewModelSmartAdvisor.ImportRuntimeState(simulation.AdvisorContext, save.AdvisorPriority);
                 }
 
                 return imported;

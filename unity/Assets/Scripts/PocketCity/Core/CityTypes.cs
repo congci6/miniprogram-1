@@ -543,6 +543,37 @@ namespace PocketCity.Core
     }
 
     [Serializable]
+    public sealed class SavedStringIntEntry
+    {
+        public string Key = string.Empty;
+        public int Value;
+    }
+
+    [Serializable]
+    public sealed class SavedStringFloatEntry
+    {
+        public string Key = string.Empty;
+        public float Value;
+    }
+
+    [Serializable]
+    public sealed class AdvisorContextSaveData
+    {
+        public List<string> RecentActions = new List<string>();
+        public List<SavedStringIntEntry> ActionCounts = new List<SavedStringIntEntry>();
+        public List<SavedStringFloatEntry> LastShownSecondsAgo = new List<SavedStringFloatEntry>();
+        public float LastActionSecondsAgo = -1f;
+    }
+
+    [Serializable]
+    public sealed class AdvisorPrioritySaveData
+    {
+        public List<SavedStringFloatEntry> LastShownSecondsAgo = new List<SavedStringFloatEntry>();
+        public List<SavedStringIntEntry> ShownCounts = new List<SavedStringIntEntry>();
+        public List<SavedStringIntEntry> UserActedCounts = new List<SavedStringIntEntry>();
+    }
+
+    [Serializable]
     public sealed class CitySaveData
     {
         public int Version = 1;
@@ -562,5 +593,7 @@ namespace PocketCity.Core
         public List<string> UnlockedBuildingIds = new List<string>();
         public List<CityPolicy> ActivePolicies = new List<CityPolicy>();
         public bool LockedExpansionUnlocked;
+        public AdvisorContextSaveData AdvisorContext;
+        public AdvisorPrioritySaveData AdvisorPriority;
     }
 }

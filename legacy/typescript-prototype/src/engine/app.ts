@@ -14,6 +14,7 @@ import { registerShareEntry } from '../platform/wx-share';
 import { CityState } from '../simulation/city-state';
 import { describeUpgradeReadiness } from '../simulation/upgrade';
 import { previewConstruction, type ConstructionPreview } from '../simulation/construction-preview';
+import { demandAdvisor } from '../simulation/demand-advisor';
 import { createSave, deserializeSave, serializeSave } from '../simulation/save';
 import { tickCity } from '../simulation/tick';
 import type { GameCommand, GridPos, OverlayMode } from '../types';
@@ -88,6 +89,7 @@ export class CityGameApp {
       toast: this.toast.current(now),
       roadAnchor: this.roadAnchor ? `${this.roadAnchor.x},${this.roadAnchor.y}` : undefined,
       selectedBuildingLabels: this.selectedBuildingLabels(),
+      demandAdvisorLabel: demandAdvisor(this.city.metrics).text,
     });
     this.overlay.render(this.renderer);
 

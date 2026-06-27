@@ -141,6 +141,91 @@ namespace PocketCity.Simulation
             recentActions.Clear();
             actionCounts.Clear();
             lastShownTime.Clear();
+            lastActionTime = 0f;
+        }
+
+        public AdvisorContextSaveData CreateSaveData()
+        {
+            var save = new AdvisorContextSaveData();
+            var now = SimulationTime.Time;
+
+            foreach (var action in recentActions)
+            {
+                save.RecentActions.Add(action);
+            }
+
+            foreach (var pair in actionCounts)
+            {
+                save.ActionCounts.Add(new SavedStringIntEntry
+                {
+                    Key = pair.Key,
+                    Value = pair.Value
+                });
+            }
+
+            foreach (var pair in lastShownTime)
+            {
+                save.LastShownSecondsAgo.Add(new SavedStringFloatEntry
+                {
+                    Key = pair.Key,
+                    Value = now - pair.Value
+                });
+            }
+
+            save.LastActionSecondsAgo = lastActionTime > 0f ? now - lastActionTime : -1f;
+            return save;
+        }
+
+        public void ApplySaveData(AdvisorContextSaveData save)
+        {
+            Reset();
+            if (save == null)
+            {
+                return;
+            }
+
+            if (save.RecentActions != null)
+            {
+                for (var i = 0; i < save.RecentActions.Count; i += 1)
+                {
+                    if (!string.IsNullOrEmpty(save.RecentActions[i]))
+                    {
+                        recentActions.Enqueue(save.RecentActions[i]);
+                    }
+                }
+
+                while (recentActions.Count > MaxRecentActions)
+                {
+                    recentActions.Dequeue();
+                }
+            }
+
+            if (save.ActionCounts != null)
+            {
+                for (var i = 0; i < save.ActionCounts.Count; i += 1)
+                {
+                    var entry = save.ActionCounts[i];
+                    if (entry != null && !string.IsNullOrEmpty(entry.Key) && entry.Value > 0)
+                    {
+                        actionCounts[entry.Key] = entry.Value;
+                    }
+                }
+            }
+
+            var now = SimulationTime.Time;
+            if (save.LastShownSecondsAgo != null)
+            {
+                for (var i = 0; i < save.LastShownSecondsAgo.Count; i += 1)
+                {
+                    var entry = save.LastShownSecondsAgo[i];
+                    if (entry != null && !string.IsNullOrEmpty(entry.Key))
+                    {
+                        lastShownTime[entry.Key] = now - entry.Value;
+                    }
+                }
+            }
+
+            lastActionTime = save.LastActionSecondsAgo >= 0f ? now - save.LastActionSecondsAgo : 0f;
         }
 
         private bool HasRecentAction(string prefix)
