@@ -309,7 +309,7 @@ class WeChatCityGame {
     const x = this.width - 262;
     const y = 54;
     const width = 250;
-    const height = 174;
+    const height = 222;
     this.layoutActionButtons();
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, height, 6);
@@ -319,11 +319,14 @@ class WeChatCityGame {
     const production = this.sim.productionQueue.length
       ? this.sim.productionQueue.map((job) => `${job.label}${job.remainingDays}天`).join(' ')
       : '空闲';
+    const objective = this.sim.getObjectives().find((candidate) => !candidate.completed);
     const lines = [
       `仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()}  ${this.materialLine()}`,
       `工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`,
       firstOrder ? `订单: ${firstOrder.title} +$${firstOrder.rewardCash}` : '订单: 暂无',
       firstOrder ? `需求: ${this.formatCost(firstOrder.required)}` : '需求: 无',
+      objective ? `目标: ${objective.title} +$${objective.rewardCash}` : '目标: 阶段目标已完成',
+      objective ? objective.description : '继续扩建城市并优化路网',
     ];
 
     this.ctx.fillStyle = '#dbe6df';
@@ -391,7 +394,7 @@ class WeChatCityGame {
   private layoutActionButtons(): void {
     this.actionButtons.length = 0;
     const x = this.width - 250;
-    const y = 138;
+    const y = 176;
     const width = 48;
     const gap = 6;
     (Object.keys(MATERIAL_LABELS) as MaterialId[]).forEach((materialId, index) => {

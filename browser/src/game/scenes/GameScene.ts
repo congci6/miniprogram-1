@@ -103,6 +103,7 @@ export class GameScene extends Phaser.Scene {
         storageCapacity: this.sim.getStorageCapacity(),
         orders: this.sim.orders,
         completedOrders: this.sim.completedOrders,
+        objectives: this.sim.getObjectives(),
         selectedTool: this.selectedTool,
         message,
       },

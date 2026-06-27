@@ -1,6 +1,7 @@
 import {
   CityMaterialInventory,
   CityMetrics,
+  CityObjective,
   CityOrder,
   MaterialId,
   PlanningTool,
@@ -58,6 +59,7 @@ export class HUD {
   private storageCapacity = 30;
   private orders: CityOrder[] = [];
   private completedOrders = 0;
+  private objectives: CityObjective[] = [];
   private buttons = new Map<PlanningTool, HTMLButtonElement>();
 
   constructor() {
@@ -77,7 +79,7 @@ export class HUD {
       'position:absolute;top:54px;right:12px;width:286px;padding:10px 12px;' +
       'background:rgba(18,24,28,0.82);color:#dbe6df;font-size:12px;' +
       'border:1px solid rgba(255,255,255,0.1);border-radius:6px;' +
-      'pointer-events:auto;z-index:22;line-height:1.45;';
+      'pointer-events:auto;z-index:22;line-height:1.45;max-height:calc(100vh - 128px);overflow:auto;';
     c.appendChild(this.managementPanel);
 
     this.toolBar = document.createElement('div');
@@ -128,6 +130,7 @@ export class HUD {
       this.storageCapacity = e.detail.storageCapacity ?? this.storageCapacity;
       this.orders = e.detail.orders ?? this.orders;
       this.completedOrders = e.detail.completedOrders ?? this.completedOrders;
+      this.objectives = e.detail.objectives ?? this.objectives;
       this.update(e.detail.metrics);
     }) as EventListener);
 
@@ -207,6 +210,8 @@ export class HUD {
       productionText + '<br><br>' +
       '<strong>城市订单</strong> 已交付 ' + this.completedOrders + '<br>' +
       this.orders.map((order) => this.orderHtml(order)).join('') +
+      '<br><strong>城市目标</strong><br>' +
+      this.objectives.map((objective) => this.objectiveHtml(objective)).join('') +
       '<div style="margin-top:8px">' +
       '<button data-action="upgrade" style="' + this.actionButtonStyle('#6ea85f') + '">升级选中住宅</button>' +
       '</div>';
@@ -237,6 +242,15 @@ export class HUD {
       order.title + ' +' + order.rewardCash + '<br>' +
       '<span style="color:#aebbb4">' + this.formatCost(order.required) + '</span> ' +
       '<button data-order="' + order.id + '" style="' + this.actionButtonStyle('#3f5f82') + '">交付</button>' +
+      '</div>';
+  }
+
+  private objectiveHtml(objective: CityObjective): string {
+    const state = objective.completed ? '已完成' : '待推进';
+    const color = objective.completed ? '#9ed58e' : '#f2d479';
+    return '<div style="margin-top:5px;color:' + color + '">' +
+      state + ' ' + objective.title + '<br>' +
+      '<span style="color:#aebbb4">' + objective.description + ' +$' + objective.rewardCash + '</span>' +
       '</div>';
   }
 

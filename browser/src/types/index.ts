@@ -39,6 +39,9 @@ export interface ProductionJob {
 export interface CityOrder {
   id: string; title: string; required: MaterialCost; rewardCash: number;
 }
+export interface CityObjective {
+  id: string; title: string; description: string; rewardCash: number; completed: boolean;
+}
 export interface GridPos { x: number; y: number }
 export interface BuildingDefinition {
   id: string; name: string; category: BuildingCategory;

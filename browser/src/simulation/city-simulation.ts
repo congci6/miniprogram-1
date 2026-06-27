@@ -2,6 +2,7 @@ import { CityGrid } from './grid';
 import {
   CityMaterialInventory,
   CityMetrics,
+  CityObjective,
   CityOrder,
   CityPolicy,
   CityTaxLevel,
@@ -20,6 +21,8 @@ interface GridStats {
   jobs: number;
   pollution: number;
   industrialTiles: number;
+  residentialTiles: number;
+  upgradedResidentialTiles: number;
 }
 
 export interface PlanningActionResult {
@@ -48,6 +51,7 @@ export interface CitySimulationSnapshot {
   productionQueue: ProductionJob[];
   orders: CityOrder[];
   completedOrders: number;
+  completedObjectiveIds?: string[];
   nextProductionId: number;
   nextOrderId: number;
   tiles: TileSnapshot[];
@@ -91,6 +95,52 @@ const RESIDENTIAL_CAPACITY_BY_LEVEL: Record<number, number> = {
   3: 64,
 };
 
+interface CityObjectiveDefinition {
+  id: string;
+  title: string;
+  description: string;
+  rewardCash: number;
+  isMet: (simulation: CitySimulation, stats: GridStats) => boolean;
+}
+
+const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
+  {
+    id: 'first-road',
+    title: '接通第一条路',
+    description: '修建 1 段道路，给街区留下通行骨架',
+    rewardCash: 180,
+    isMet: (_simulation, stats) => stats.roads >= 1,
+  },
+  {
+    id: 'first-neighborhood',
+    title: '形成第一片社区',
+    description: '规划 2 个住宅地块，打开人口增长',
+    rewardCash: 260,
+    isMet: (_simulation, stats) => stats.residentialTiles >= 2,
+  },
+  {
+    id: 'start-factory',
+    title: '启动材料生产',
+    description: '排产任意一种材料，建立订单供给',
+    rewardCash: 320,
+    isMet: (simulation) => simulation.productionQueue.length > 0 || simulation.getStorageUsed() > 0 || simulation.completedOrders > 0,
+  },
+  {
+    id: 'first-delivery',
+    title: '完成第一笔订单',
+    description: '交付 1 个城市订单，回收建设现金',
+    rewardCash: 520,
+    isMet: (simulation) => simulation.completedOrders >= 1,
+  },
+  {
+    id: 'upgrade-home',
+    title: '升级一处住宅',
+    description: '把任意住宅升级到 2 级，提升住房容量',
+    rewardCash: 640,
+    isMet: (_simulation, stats) => stats.upgradedResidentialTiles >= 1,
+  },
+];
+
 const ZONE_COST = 120;
 const ROAD_COST = 180;
 const ERASE_COST = 20;
@@ -104,6 +154,7 @@ export class CitySimulation {
   readonly productionQueue: ProductionJob[] = [];
   readonly orders: CityOrder[] = [];
   completedOrders = 0;
+  private readonly completedObjectiveIds = new Set<string>();
   private dayAccumulator = 0;
   private taxLevel: CityTaxLevel = CityTaxLevel.Normal;
   private activePolicies: CityPolicy[] = [];
@@ -140,6 +191,7 @@ export class CitySimulation {
       this.computeMetrics();
       this.processPopulation();
       this.processEconomy();
+      if (this.evaluateObjectives().length > 0) this.computeMetrics();
     }
   }
 
@@ -157,7 +209,7 @@ export class CitySimulation {
       if (!this.trySpend(ROAD_COST)) return { changed: false, message: '现金不足，无法修建道路' };
       this.grid.setRoad(x, y, 'local');
       this.computeMetrics();
-      return { changed: true, message: `修建道路 -$${ROAD_COST}` };
+      return { changed: true, message: this.appendObjectiveRewards(`修建道路 -$${ROAD_COST}`) };
     }
 
     if (tool === 'erase') {
@@ -167,7 +219,7 @@ export class CitySimulation {
       if (!this.trySpend(ERASE_COST)) return { changed: false, message: '现金不足，无法清理地块' };
       this.grid.clearPlanning(x, y);
       this.computeMetrics();
-      return { changed: true, message: `清理地块 -$${ERASE_COST}` };
+      return { changed: true, message: this.appendObjectiveRewards(`清理地块 -$${ERASE_COST}`) };
     }
 
     const zone = this.zoneFromTool(tool);
@@ -178,7 +230,7 @@ export class CitySimulation {
 
     this.grid.setZone(x, y, zone);
     this.computeMetrics();
-    return { changed: true, message: `划定${stats.label} -$${ZONE_COST}` };
+    return { changed: true, message: this.appendObjectiveRewards(`划定${stats.label} -$${ZONE_COST}`) };
   }
 
   startProduction(materialId: MaterialId): PlanningActionResult {
@@ -201,7 +253,7 @@ export class CitySimulation {
       remainingDays: recipe.days,
       totalDays: recipe.days,
     });
-    return { changed: true, message: `${recipe.label}已排产 -$${recipe.cashCost}` };
+    return { changed: true, message: this.appendObjectiveRewards(`${recipe.label}已排产 -$${recipe.cashCost}`) };
   }
 
   fulfillOrder(orderId: string): PlanningActionResult {
@@ -217,7 +269,7 @@ export class CitySimulation {
     this.orders.splice(this.orders.indexOf(order), 1);
     this.ensureOrders();
     this.computeMetrics();
-    return { changed: true, message: `${order.title}交付 +$${order.rewardCash}` };
+    return { changed: true, message: this.appendObjectiveRewards(`${order.title}交付 +$${order.rewardCash}`) };
   }
 
   upgradeResidentialAt(x: number, y: number): PlanningActionResult {
@@ -237,7 +289,7 @@ export class CitySimulation {
     this.grid.setBuilding(x, y, `residential_l${nextLevel}`);
     this.metrics.cash += 220 * nextLevel;
     this.computeMetrics();
-    return { changed: true, message: `住宅升级到 ${nextLevel} 级 +$${220 * nextLevel}` };
+    return { changed: true, message: this.appendObjectiveRewards(`住宅升级到 ${nextLevel} 级 +$${220 * nextLevel}`) };
   }
 
   getProductionSlots(): number {
@@ -257,6 +309,16 @@ export class CitySimulation {
     if (tile.zone !== ZoneType.Residential) return 0;
     const match = /^residential_l([2-3])$/.exec(tile.buildingId);
     return match ? Number(match[1]) : 1;
+  }
+
+  getObjectives(): CityObjective[] {
+    return OBJECTIVE_DEFINITIONS.map((objective) => ({
+      id: objective.id,
+      title: objective.title,
+      description: objective.description,
+      rewardCash: objective.rewardCash,
+      completed: this.completedObjectiveIds.has(objective.id),
+    }));
   }
 
   createSnapshot(): CitySimulationSnapshot {
@@ -282,6 +344,7 @@ export class CitySimulation {
       productionQueue: this.productionQueue.map((job) => ({ ...job })),
       orders: this.orders.map((order) => ({ ...order, required: { ...order.required } })),
       completedOrders: this.completedOrders,
+      completedObjectiveIds: [...this.completedObjectiveIds],
       nextProductionId: this.nextProductionId,
       nextOrderId: this.nextOrderId,
       tiles,
@@ -299,6 +362,8 @@ export class CitySimulation {
       this.productionQueue.splice(0, this.productionQueue.length, ...snapshot.productionQueue.map((job) => ({ ...job })));
       this.orders.splice(0, this.orders.length, ...snapshot.orders.map((order) => ({ ...order, required: { ...order.required } })));
       this.completedOrders = Math.max(0, snapshot.completedOrders);
+      this.completedObjectiveIds.clear();
+      for (const objectiveId of snapshot.completedObjectiveIds ?? []) this.completedObjectiveIds.add(objectiveId);
       this.nextProductionId = Math.max(1, snapshot.nextProductionId);
       this.nextOrderId = Math.max(1, snapshot.nextOrderId);
     } else {
@@ -308,6 +373,7 @@ export class CitySimulation {
       this.productionQueue.splice(0, this.productionQueue.length);
       this.orders.splice(0, this.orders.length);
       this.completedOrders = 0;
+      this.completedObjectiveIds.clear();
       this.nextProductionId = 1;
       this.nextOrderId = 1;
     }
@@ -324,6 +390,7 @@ export class CitySimulation {
 
     this.ensureOrders();
     this.computeMetrics();
+    if (this.evaluateObjectives().length > 0) this.computeMetrics();
   }
 
   getTaxRevenue(): number {
@@ -349,6 +416,26 @@ export class CitySimulation {
       this.materials[job.materialId]++;
       this.productionQueue.splice(i, 1);
     }
+  }
+
+  private appendObjectiveRewards(message: string): string {
+    const rewards = this.evaluateObjectives();
+    if (rewards.length === 0) return message;
+    this.computeMetrics();
+    return `${message}；目标完成：${rewards.join('、')}`;
+  }
+
+  private evaluateObjectives(): string[] {
+    const stats = this.calculateGridStats();
+    const rewards: string[] = [];
+    for (const objective of OBJECTIVE_DEFINITIONS) {
+      if (this.completedObjectiveIds.has(objective.id)) continue;
+      if (!objective.isMet(this, stats)) continue;
+      this.completedObjectiveIds.add(objective.id);
+      this.metrics.cash += objective.rewardCash;
+      rewards.push(`${objective.title} +$${objective.rewardCash}`);
+    }
+    return rewards;
   }
 
   private zoneFromTool(tool: PlanningTool): ZoneType {
@@ -386,7 +473,16 @@ export class CitySimulation {
   }
 
   private calculateGridStats(): GridStats {
-    const stats: GridStats = { roads: 0, zonedTiles: 0, housingCapacity: 0, jobs: 0, pollution: 0, industrialTiles: 0 };
+    const stats: GridStats = {
+      roads: 0,
+      zonedTiles: 0,
+      housingCapacity: 0,
+      jobs: 0,
+      pollution: 0,
+      industrialTiles: 0,
+      residentialTiles: 0,
+      upgradedResidentialTiles: 0,
+    };
     for (let y = 0; y < this.grid.height; y++) {
       for (let x = 0; x < this.grid.width; x++) {
         const tile = this.grid.getTile(x, y);
@@ -401,6 +497,10 @@ export class CitySimulation {
           stats.jobs += zoneStats.jobs;
           stats.pollution += zoneStats.pollution;
           if (tile.zone === ZoneType.Industrial) stats.industrialTiles++;
+          if (tile.zone === ZoneType.Residential) {
+            stats.residentialTiles++;
+            if (this.getResidentialLevel(tile) > 1) stats.upgradedResidentialTiles++;
+          }
         }
       }
     }
