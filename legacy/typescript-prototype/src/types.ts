@@ -52,6 +52,8 @@ export type PlacedBuilding = {
   pos: GridPos;
   size: { w: number; h: number };
   connectedRoadId?: string;
+  level: number;
+  placedAt: number;
 };
 
 export type RoadNode = {
@@ -130,4 +132,15 @@ export type SaveGame = {
   createdAt: number;
   updatedAt: number;
   city: SerializedCityState;
+};
+
+export type BuildingUpgradeStage = {
+  level: number;
+  requiredAgeSeconds: number;
+  minServiceCoverage: number;
+  minHappiness: number;
+  minDemand: number;
+  capacityMultiplier: number;
+  jobsMultiplier: number;
+  upkeepMultiplier: number;
 };

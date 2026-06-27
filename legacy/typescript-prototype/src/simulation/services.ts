@@ -1,5 +1,6 @@
-import { getBuildingConfig } from '../data/buildings';
+﻿import { getBuildingConfig } from '../data/buildings';
 import type { CityMetrics, PlacedBuilding } from '../types';
+import { getAppliedStage } from './upgrade';
 
 export function recomputeCityServices(
   buildings: PlacedBuilding[],
@@ -28,10 +29,13 @@ export function recomputeCityServices(
 
   for (const placed of buildings) {
     const config = getBuildingConfig(placed.configId);
+    const stage = getAppliedStage(placed);
     const efficiency = placed.connectedRoadId ? 1 : 0.2;
-    const buildingCapacity = Math.floor((config.capacity ?? 0) * efficiency);
+    const buildingCapacity = Math.floor((config.capacity ?? 0) * stage.capacityMultiplier * efficiency);
+    const buildingJobs = Math.floor((config.jobs ?? 0) * stage.jobsMultiplier * efficiency);
+
     housingCapacity += buildingCapacity;
-    jobs += Math.floor((config.jobs ?? 0) * efficiency);
+    jobs += buildingJobs;
     powerSupply += Math.floor((config.powerOutput ?? 0) * efficiency);
     powerDemand += config.powerUse ?? 0;
     waterSupply += Math.floor((config.waterOutput ?? 0) * efficiency);
@@ -58,13 +62,21 @@ export function recomputeCityServices(
 }
 
 export function buildingUpkeep(buildings: PlacedBuilding[]): number {
-  return buildings.reduce((sum, placed) => sum + getBuildingConfig(placed.configId).upkeep, 0);
+  return buildings.reduce((sum, placed) => {
+    const config = getBuildingConfig(placed.configId);
+    const stage = getAppliedStage(placed);
+    return sum + config.upkeep * stage.upkeepMultiplier;
+  }, 0);
 }
 
 export function jobsByCategory(buildings: PlacedBuilding[], category: 'commercial' | 'industrial'): number {
   return buildings.reduce((sum, placed) => {
     const config = getBuildingConfig(placed.configId);
-    return config.category === category ? sum + (config.jobs ?? 0) : sum;
+    if (config.category !== category) {
+      return sum;
+    }
+    const stage = getAppliedStage(placed);
+    return sum + Math.floor((config.jobs ?? 0) * stage.jobsMultiplier);
   }, 0);
 }
 

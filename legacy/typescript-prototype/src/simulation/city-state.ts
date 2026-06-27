@@ -1,6 +1,5 @@
-import { BALANCE } from '../data/balance';
-import { BUILDINGS } from '../data/buildings';
-import { getBuildingConfig } from '../data/buildings';
+﻿import { BALANCE } from '../data/balance';
+import { BUILDINGS, getBuildingConfig } from '../data/buildings';
 import { ROAD } from '../data/roads';
 import { CityGrid } from '../map/grid';
 import { manhattanLine, nearestRoadId } from '../map/placement';
@@ -79,7 +78,13 @@ export class CityState {
     );
 
     for (const building of serialized.buildings) {
-      city.buildings.set(building.id, { ...building, pos: { ...building.pos }, size: { ...building.size } });
+      city.buildings.set(building.id, {
+        ...building,
+        pos: { ...building.pos },
+        size: { ...building.size },
+        level: building.level ?? 0,
+        placedAt: building.placedAt ?? 0,
+      });
     }
     for (const road of serialized.roads) {
       city.roads.set(road.id, cloneRoad(road));
@@ -112,6 +117,22 @@ export class CityState {
     }));
   }
 
+  getBuildingById(id: string): PlacedBuilding | undefined {
+    const building = this.buildings.get(id);
+    return building
+      ? {
+          ...building,
+          pos: { ...building.pos },
+          size: { ...building.size },
+        }
+      : undefined;
+  }
+
+  getBuildingAt(pos: GridPos): PlacedBuilding | undefined {
+    const buildingId = this.grid.findBuildingIdAt(pos);
+    return buildingId ? this.getBuildingById(buildingId) : undefined;
+  }
+
   getRoads(): RoadNode[] {
     return Array.from(this.roads.values()).map(cloneRoad);
   }
@@ -125,6 +146,33 @@ export class CityState {
     for (const road of this.roads.values()) {
       road.load = loads.get(road.id) ?? 0;
     }
+  }
+
+  applyBuildingUpgrade(id: string, level: number): boolean {
+    const building = this.buildings.get(id);
+    if (!building || level <= building.level) {
+      return false;
+    }
+    building.level = level;
+    return true;
+  }
+
+  developZonedBuilding(configId: string, pos: GridPos): boolean {
+    const config = getBuildingConfig(configId);
+    const placement = this.grid.canPlaceBuilding(pos, config.size);
+    if (!placement.ok || config.cost > this.metrics.cash) {
+      return false;
+    }
+
+    const id = `building-${this.nextId}`;
+    this.nextId += 1;
+    this.grid.occupyBuilding(id, pos, config.size);
+    this.buildings.set(
+      id,
+      this.createPlacedBuilding(id, configId, pos, config.size, this.elapsedSeconds),
+    );
+    this.metrics.cash -= config.cost;
+    return true;
   }
 
   recomputeMetrics(): void {
@@ -237,17 +285,12 @@ export class CityState {
     const id = `building-${this.nextId}`;
     this.nextId += 1;
     this.grid.occupyBuilding(id, pos, config.size);
-    const connectedRoadId = nearestRoadId(this.grid, pos, BALANCE.maxRoadSearchDistance, config.size);
-    this.buildings.set(id, {
-      id,
-      configId,
-      pos: { ...pos },
-      size: { ...config.size },
-      connectedRoadId,
-    });
+    this.buildings.set(id, this.createPlacedBuilding(id, configId, pos, config.size, this.elapsedSeconds));
     this.metrics.cash -= config.cost;
     this.recomputeMetrics();
 
+    const building = this.buildings.get(id);
+    const connectedRoadId = building?.connectedRoadId;
     return {
       ok: true,
       message: connectedRoadId ? `${config.name} 已建成` : `${config.name} 已建成，靠近道路效率更高`,
@@ -317,23 +360,30 @@ export class CityState {
     const id = `building-${this.nextId}`;
     this.nextId += 1;
     this.grid.occupyBuilding(id, pos, config.size);
-    this.buildings.set(id, {
+    this.buildings.set(id, this.createPlacedBuilding(id, configId, pos, config.size, this.elapsedSeconds));
+  }
+
+  private createPlacedBuilding(
+    id: string,
+    configId: string,
+    pos: GridPos,
+    size: { w: number; h: number },
+    placedAt: number,
+  ): PlacedBuilding {
+    return {
       id,
       configId,
       pos: { ...pos },
-      size: { ...config.size },
-      connectedRoadId: nearestRoadId(this.grid, pos, BALANCE.maxRoadSearchDistance, config.size),
-    });
+      size: { ...size },
+      connectedRoadId: nearestRoadId(this.grid, pos, BALANCE.maxRoadSearchDistance, size),
+      level: 0,
+      placedAt,
+    };
   }
 
   private refreshBuildingRoadConnections(): void {
     for (const building of this.buildings.values()) {
-      building.connectedRoadId = nearestRoadId(
-        this.grid,
-        building.pos,
-        BALANCE.maxRoadSearchDistance,
-        building.size,
-      );
+      building.connectedRoadId = nearestRoadId(this.grid, building.pos, BALANCE.maxRoadSearchDistance, building.size);
     }
   }
 

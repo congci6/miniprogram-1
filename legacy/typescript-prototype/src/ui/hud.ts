@@ -27,6 +27,7 @@ export type HudState = {
   taxRate: number;
   toast?: string;
   roadAnchor?: string;
+  selectedBuildingLabel?: string;
 };
 
 export class HudController {
@@ -85,6 +86,7 @@ export class HudController {
     ctx.save();
     ctx.textBaseline = 'middle';
     this.drawTopPanel(ctx, state);
+    this.drawSelectedBuildingBadge(ctx, state.selectedBuildingLabel);
     this.drawOverlayBadge(ctx, state.overlayMode);
     if (state.buildPreview) {
       this.drawBuildPreview(ctx, state.buildPreview);
@@ -129,6 +131,20 @@ export class HudController {
       ctx.fillStyle = lineColors[index] ?? '#e2e8f0';
       ctx.fillText(line, x + 14, y + 39 + index * 14);
     });
+  }
+
+  private drawSelectedBuildingBadge(ctx: CanvasRenderingContext2D, label?: string): void {
+    if (!label) {
+      return;
+    }
+    const width = Math.min(320, Math.max(180, label.length * 11));
+    roundedRect(ctx, 12, 156, width, 28, 8);
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.82)';
+    ctx.fill();
+    ctx.fillStyle = '#fde68a';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'start';
+    ctx.fillText(label, 24, 170);
   }
 
   private drawOverlayBadge(ctx: CanvasRenderingContext2D, overlayMode: OverlayMode): void {
