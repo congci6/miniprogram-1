@@ -44,7 +44,8 @@ export interface CityOrder {
   id: string; title: string; required: MaterialCost; rewardCash: number;
 }
 export interface CityObjective {
-  id: string; title: string; description: string; rewardCash: number; completed: boolean;
+  id: string; title: string; description: string;
+  rewardCash: number; rewardExperience: number; completed: boolean;
 }
 export interface GridPos { x: number; y: number }
 export interface BuildingDefinition {
@@ -59,6 +60,7 @@ export interface BuildingDefinition {
 export interface CityMetrics {
   day: number; population: number; cash: number;
   happiness: number; cityScore: number;
+  cityLevel: number; cityExperience: number; nextLevelExperience: number;
   cityLevelName: string; taxRatePercent: number;
   congestion: number; pollution: number; crime: number;
   healthCoverage: number; educationCoverage: number;

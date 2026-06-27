@@ -160,9 +160,10 @@ export class HUD {
 
   private update(m: CityMetrics): void {
     this.topBar.innerHTML =
-      '<span>第 ' + m.day + ' 天</span>' +
+      '<span>第 ' + m.day + ' 天 / Lv ' + m.cityLevel + '</span>' +
       '<span>人口: ' + m.population.toLocaleString() + '</span>' +
       '<span>现金: $' + m.cash.toLocaleString() + '</span>' +
+      '<span>经验: ' + m.cityExperience + '/' + m.nextLevelExperience + '</span>' +
       '<span>幸福度: ' + m.happiness + '</span>' +
       '<span>评分: ' + m.cityScore + '</span>';
     this.renderSidePanel(m);
@@ -198,7 +199,7 @@ export class HUD {
     }
 
     this.sidePanel.innerHTML =
-      '等级: ' + metrics.cityLevelName + '<br>' +
+      '等级: Lv ' + metrics.cityLevel + ' ' + metrics.cityLevelName + '<br>' +
       '住房容量: ' + metrics.housingCapacity.toLocaleString() + '<br>' +
       '已开发地块: ' + metrics.buildingCount + '<br>' +
       '道路覆盖: ' + Math.round(metrics.roadCoverage) + '%<br>' +
@@ -271,7 +272,7 @@ export class HUD {
     const color = objective.completed ? '#9ed58e' : '#f2d479';
     return '<div style="margin-top:5px;color:' + color + '">' +
       state + ' ' + objective.title + '<br>' +
-      '<span style="color:#aebbb4">' + objective.description + ' +$' + objective.rewardCash + '</span>' +
+      '<span style="color:#aebbb4">' + objective.description + ' +$' + objective.rewardCash + ' / 经验+' + objective.rewardExperience + '</span>' +
       '</div>';
   }
 

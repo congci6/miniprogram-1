@@ -169,6 +169,7 @@ interface CityObjectiveDefinition {
   title: string;
   description: string;
   rewardCash: number;
+  rewardExperience: number;
   isMet: (simulation: CitySimulation, stats: GridStats) => boolean;
 }
 
@@ -178,6 +179,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '接通第一条路',
     description: '修建 1 段道路，给街区留下通行骨架',
     rewardCash: 180,
+    rewardExperience: 20,
     isMet: (_simulation, stats) => stats.roads >= 1,
   },
   {
@@ -185,6 +187,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '升级第一条主干道',
     description: '把任意道路升级为主干道，提高通行容量',
     rewardCash: 540,
+    rewardExperience: 45,
     isMet: (_simulation, stats) => stats.upgradedRoads >= 1,
   },
   {
@@ -192,6 +195,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '形成第一片社区',
     description: '规划 2 个住宅地块，打开人口增长',
     rewardCash: 260,
+    rewardExperience: 35,
     isMet: (_simulation, stats) => stats.residentialTiles >= 2,
   },
   {
@@ -199,6 +203,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '启动材料生产',
     description: '排产任意一种材料，建立订单供给',
     rewardCash: 320,
+    rewardExperience: 30,
     isMet: (simulation) => simulation.productionQueue.length > 0 || simulation.getStorageUsed() > 0 || simulation.completedOrders > 0,
   },
   {
@@ -206,6 +211,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '完成第一笔订单',
     description: '交付 1 个城市订单，回收建设现金',
     rewardCash: 520,
+    rewardExperience: 55,
     isMet: (simulation) => simulation.completedOrders >= 1,
   },
   {
@@ -213,6 +219,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '升级一处住宅',
     description: '把任意住宅升级到 2 级，提升住房容量',
     rewardCash: 640,
+    rewardExperience: 70,
     isMet: (_simulation, stats) => stats.upgradedResidentialTiles >= 1,
   },
   {
@@ -220,6 +227,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '建设第一座公共服务',
     description: '建成公园、诊所或学校中的任意一座',
     rewardCash: 520,
+    rewardExperience: 50,
     isMet: (_simulation, stats) => stats.serviceBuildings >= 1,
   },
   {
@@ -227,6 +235,7 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     title: '完善基础服务覆盖',
     description: '让公园、医疗、教育覆盖率都达到 50%',
     rewardCash: 960,
+    rewardExperience: 120,
     isMet: (simulation) => simulation.metrics.parkCoverage >= 50
       && simulation.metrics.healthCoverage >= 50
       && simulation.metrics.educationCoverage >= 50,
@@ -249,6 +258,28 @@ const ROAD_LABELS: Record<string, string> = {
   local: '普通道路',
   arterial: '主干道',
 };
+const ACTION_EXPERIENCE = {
+  road: 8,
+  zone: 5,
+  production: 3,
+  order: 45,
+  residentialUpgrade: 60,
+  service: 40,
+  roadUpgrade: 35,
+};
+const CITY_LEVEL_EXPERIENCE = [0, 80, 220, 460, 800, 1250, 1800, 2500, 3400, 4600];
+const CITY_LEVEL_NAMES = [
+  '新生街区',
+  '起步城区',
+  '成长街区',
+  '活力城区',
+  '繁荣城区',
+  '区域中心',
+  '都会核心',
+  '卓越都会',
+  '理想城市',
+  '未来都会',
+];
 
 export class CitySimulation {
   readonly grid: CityGrid;
@@ -274,7 +305,8 @@ export class CitySimulation {
   private createInitialMetrics(): CityMetrics {
     return {
       day: 1, population: 0, cash: 50000, happiness: 50,
-      cityScore: 50, cityLevelName: '新生街区',
+      cityScore: 50, cityLevel: 1, cityExperience: 0,
+      nextLevelExperience: CITY_LEVEL_EXPERIENCE[1], cityLevelName: CITY_LEVEL_NAMES[0],
       taxRatePercent: 9, congestion: 0, pollution: 0, crime: 0,
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
@@ -312,7 +344,7 @@ export class CitySimulation {
       if (!this.trySpend(ROAD_COST)) return { changed: false, message: '现金不足，无法修建道路' };
       this.grid.setRoad(x, y, 'local');
       this.computeMetrics();
-      return { changed: true, message: this.appendObjectiveRewards(`修建道路 -$${ROAD_COST}`) };
+      return { changed: true, message: this.appendObjectiveRewards(`修建道路 -$${ROAD_COST}`, ACTION_EXPERIENCE.road) };
     }
 
     if (tool === 'erase') {
@@ -336,7 +368,7 @@ export class CitySimulation {
 
     this.grid.setZone(x, y, zone);
     this.computeMetrics();
-    return { changed: true, message: this.appendObjectiveRewards(`划定${stats.label} -$${ZONE_COST}`) };
+    return { changed: true, message: this.appendObjectiveRewards(`划定${stats.label} -$${ZONE_COST}`, ACTION_EXPERIENCE.zone) };
   }
 
   startProduction(materialId: MaterialId): PlanningActionResult {
@@ -359,7 +391,7 @@ export class CitySimulation {
       remainingDays: recipe.days,
       totalDays: recipe.days,
     });
-    return { changed: true, message: this.appendObjectiveRewards(`${recipe.label}已排产 -$${recipe.cashCost}`) };
+    return { changed: true, message: this.appendObjectiveRewards(`${recipe.label}已排产 -$${recipe.cashCost}`, ACTION_EXPERIENCE.production) };
   }
 
   fulfillOrder(orderId: string): PlanningActionResult {
@@ -375,7 +407,7 @@ export class CitySimulation {
     this.orders.splice(this.orders.indexOf(order), 1);
     this.ensureOrders();
     this.computeMetrics();
-    return { changed: true, message: this.appendObjectiveRewards(`${order.title}交付 +$${order.rewardCash}`) };
+    return { changed: true, message: this.appendObjectiveRewards(`${order.title}交付 +$${order.rewardCash}`, ACTION_EXPERIENCE.order) };
   }
 
   upgradeResidentialAt(x: number, y: number): PlanningActionResult {
@@ -395,7 +427,7 @@ export class CitySimulation {
     this.grid.setBuilding(x, y, `residential_l${nextLevel}`);
     this.metrics.cash += 220 * nextLevel;
     this.computeMetrics();
-    return { changed: true, message: this.appendObjectiveRewards(`住宅升级到 ${nextLevel} 级 +$${220 * nextLevel}`) };
+    return { changed: true, message: this.appendObjectiveRewards(`住宅升级到 ${nextLevel} 级 +$${220 * nextLevel}`, ACTION_EXPERIENCE.residentialUpgrade) };
   }
 
   upgradeRoadAt(x: number, y: number): PlanningActionResult {
@@ -407,7 +439,7 @@ export class CitySimulation {
 
     this.grid.setRoad(x, y, 'arterial');
     this.computeMetrics();
-    return { changed: true, message: this.appendObjectiveRewards(`道路升级为主干道 -$${ROAD_UPGRADE_COST}`) };
+    return { changed: true, message: this.appendObjectiveRewards(`道路升级为主干道 -$${ROAD_UPGRADE_COST}`, ACTION_EXPERIENCE.roadUpgrade) };
   }
 
   getProductionSlots(): number {
@@ -443,6 +475,7 @@ export class CitySimulation {
       title: objective.title,
       description: objective.description,
       rewardCash: objective.rewardCash,
+      rewardExperience: objective.rewardExperience,
       completed: this.completedObjectiveIds.has(objective.id),
     }));
   }
@@ -483,6 +516,8 @@ export class CitySimulation {
     if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3) return offlineResult;
 
     Object.assign(this.metrics, snapshot.metrics);
+    this.metrics.cityExperience = Math.max(0, this.metrics.cityExperience ?? 0);
+    this.refreshCityLevelProgress();
     if (snapshot.version === 2 || snapshot.version === 3) {
       this.materials.wood = Math.max(0, snapshot.materials.wood ?? 0);
       this.materials.metal = Math.max(0, snapshot.materials.metal ?? 0);
@@ -561,7 +596,7 @@ export class CitySimulation {
     this.grid.setZone(x, y, ZoneType.Civic);
     this.grid.setBuilding(x, y, serviceBuildingId);
     this.computeMetrics();
-    return { changed: true, message: this.appendObjectiveRewards(`建设${service.label} -$${service.cashCost}`) };
+    return { changed: true, message: this.appendObjectiveRewards(`建设${service.label} -$${service.cashCost}`, ACTION_EXPERIENCE.service) };
   }
 
   private applyOfflineProgress(savedAtMs: number, nowMs: number): CityOfflineProgressResult {
@@ -594,11 +629,17 @@ export class CitySimulation {
     };
   }
 
-  private appendObjectiveRewards(message: string): string {
+  private appendObjectiveRewards(message: string, experience = 0): string {
+    const progressParts: string[] = [];
+    if (experience > 0) {
+      this.grantExperience(experience);
+      progressParts.push(`经验+${experience}`);
+    }
     const rewards = this.evaluateObjectives();
-    if (rewards.length === 0) return message;
+    if (rewards.length > 0) progressParts.push(`目标完成：${rewards.join('、')}`);
+    if (progressParts.length === 0) return message;
     this.computeMetrics();
-    return `${message}；目标完成：${rewards.join('、')}`;
+    return `${message}；${progressParts.join('；')}`;
   }
 
   private evaluateObjectives(): string[] {
@@ -609,9 +650,27 @@ export class CitySimulation {
       if (!objective.isMet(this, stats)) continue;
       this.completedObjectiveIds.add(objective.id);
       this.metrics.cash += objective.rewardCash;
-      rewards.push(`${objective.title} +$${objective.rewardCash}`);
+      this.grantExperience(objective.rewardExperience);
+      rewards.push(`${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}`);
     }
     return rewards;
+  }
+
+  private grantExperience(amount: number): void {
+    this.metrics.cityExperience = Math.max(0, (this.metrics.cityExperience ?? 0) + amount);
+    this.refreshCityLevelProgress();
+  }
+
+  private refreshCityLevelProgress(): void {
+    const experience = Math.max(0, this.metrics.cityExperience ?? 0);
+    let level = 1;
+    for (let i = 1; i < CITY_LEVEL_EXPERIENCE.length; i++) {
+      if (experience >= CITY_LEVEL_EXPERIENCE[i]) level = i + 1;
+    }
+    this.metrics.cityLevel = level;
+    this.metrics.cityExperience = experience;
+    this.metrics.cityLevelName = CITY_LEVEL_NAMES[Math.min(level - 1, CITY_LEVEL_NAMES.length - 1)];
+    this.metrics.nextLevelExperience = CITY_LEVEL_EXPERIENCE[level] ?? Math.max(experience, CITY_LEVEL_EXPERIENCE[CITY_LEVEL_EXPERIENCE.length - 1]);
   }
 
   private zoneFromTool(tool: PlanningTool): ZoneType {
@@ -660,9 +719,7 @@ export class CitySimulation {
     this.metrics.landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
     this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 - pollution * 0.22 - rentPressure * 0.2)));
     this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 - pollution * 0.2)));
-    this.metrics.cityLevelName = this.metrics.population >= 2500 ? '繁荣城区'
-      : this.metrics.population >= 800 ? '成长街区'
-        : '新生街区';
+    this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
   }
 

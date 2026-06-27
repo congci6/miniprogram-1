@@ -296,7 +296,7 @@ class WeChatCityGame {
     this.ctx.fillStyle = '#f4f7ef';
     this.ctx.font = 'bold 14px sans-serif';
     this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(`第 ${m.day} 天`, 14, 21);
+    this.ctx.fillText(`第 ${m.day} 天 Lv${m.cityLevel}`, 14, 21);
     this.ctx.fillText(`人口 ${m.population.toLocaleString()}`, this.width * 0.25, 21);
     this.ctx.fillText(`现金 $${m.cash.toLocaleString()}`, this.width * 0.48, 21);
     this.ctx.fillText(`幸福 ${m.happiness}`, this.width * 0.72, 21);
@@ -313,7 +313,7 @@ class WeChatCityGame {
     this.ctx.fill();
 
     const lines = [
-      `等级: ${m.cityLevelName}`,
+      `等级: Lv${m.cityLevel} ${m.cityLevelName}`,
       `住房容量: ${m.housingCapacity.toLocaleString()}`,
       `已开发地块: ${m.buildingCount}`,
       `道路覆盖: ${Math.round(m.roadCoverage)}%`,
@@ -360,7 +360,7 @@ class WeChatCityGame {
       `工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`,
       firstOrder ? `订单: ${firstOrder.title} +$${firstOrder.rewardCash}` : '订单: 暂无',
       firstOrder ? `需求: ${this.formatCost(firstOrder.required)}` : '需求: 无',
-      objective ? `目标: ${objective.title} +$${objective.rewardCash}` : '目标: 阶段目标已完成',
+      objective ? `目标: ${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}` : '目标: 阶段目标已完成',
       objective ? objective.description : '继续扩建城市并优化路网',
     ];
 
