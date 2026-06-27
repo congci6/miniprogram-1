@@ -97,6 +97,7 @@ export type CityMetrics = {
   connectedBuildings: number;
   disconnectedBuildings: number;
   unlockedBuildingIds: string[];
+  taxRate: number;
   activeObjective: CityObjective;
 };
 

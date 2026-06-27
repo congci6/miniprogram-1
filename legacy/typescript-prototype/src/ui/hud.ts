@@ -8,7 +8,8 @@ export type HudAction =
   | { type: 'select-tool'; tool: BuildToolId }
   | { type: 'save' }
   | { type: 'cycle-overlay' }
-  | { type: 'new-city' };
+  | { type: 'new-city' }
+  | { type: 'change_tax' };
 
 type Rect = { x: number; y: number; w: number; h: number };
 
@@ -23,6 +24,7 @@ export type HudState = {
   selectedTool: BuildToolId;
   overlayMode: OverlayMode;
   buildPreview?: ConstructionPreview;
+  taxRate: number;
   toast?: string;
   roadAnchor?: string;
 };

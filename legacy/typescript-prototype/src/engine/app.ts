@@ -75,6 +75,7 @@ export class CityGameApp {
     this.renderer.render(this.cityScene.scene, this.cameraRig.camera);
     this.overlay.update({
       metrics: this.city.metrics,
+      taxRate: this.city.taxRate,
       selectedTool: this.selectedTool,
       overlayMode: this.overlayMode,
       buildPreview: this.buildPreview,
@@ -155,6 +156,9 @@ export class CityGameApp {
       case 'cycle-overlay':
         this.cycleOverlayMode();
         break;
+      case 'change_tax':
+        this.cycleTaxRate();
+        break;
       case 'new-city':
         this.city = CityState.createNew();
         this.cityScene = new CityScene(this.city);
@@ -205,6 +209,14 @@ export class CityGameApp {
     const wx = getWx() as LifecycleWx | undefined;
     wx?.onHide?.(() => this.saveCity(false));
     wx?.onShow?.(() => this.toast.show('欢迎回来，城市已恢复'));
+  }
+
+  private cycleTaxRate(): void {
+    const rates = [0.06, 0.09, 0.12];
+    const current = this.city.taxRate;
+    const nextIdx = (rates.indexOf(current) + 1) % rates.length;
+    this.city.taxRate = rates[nextIdx];
+    this.toast.show('税率: ' + Math.round(rates[nextIdx] * 100) + '%');
   }
 
   private cycleOverlayMode(): void {

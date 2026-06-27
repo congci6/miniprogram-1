@@ -59,6 +59,7 @@ export class CityState {
       connectedBuildings: 0,
       disconnectedBuildings: 0,
       unlockedBuildingIds: [],
+      taxRate: BALANCE.defaultTaxRate,
       activeObjective: defaultObjective(),
     });
 
@@ -140,6 +141,7 @@ export class CityState {
     };
     this.metrics = {
       ...this.metrics,
+      taxRate: this.taxRate,
       ...evaluateCity(this.metrics, buildings, this.taxRate),
     };
     this.refreshBuildingUnlocks();
@@ -376,6 +378,7 @@ function normalizeCityMetrics(metrics: CityMetrics): CityMetrics {
     connectedBuildings: metrics.connectedBuildings ?? 0,
     disconnectedBuildings: metrics.disconnectedBuildings ?? 0,
     unlockedBuildingIds: metrics.unlockedBuildingIds ?? [],
+    taxRate: metrics.taxRate ?? BALANCE.defaultTaxRate,
     activeObjective: metrics.activeObjective ?? defaultObjective(),
   };
 }
