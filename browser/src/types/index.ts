@@ -106,6 +106,8 @@ export interface CityMetrics {
   roadCoverage: number; serviceGapPressure: number;
   parkingPressure: number; walkability: number; accidentRisk: number;
   stormwaterResilience: number; floodRisk: number; policyBacklog: number;
+  administrationLoad: number; administrationCapacity: number;
+  administrationUtilization: number; administrationEfficiency: number;
   landValue: number; rentPressure: number;
   housingCapacity: number; buildingCount: number;
   unlockedBuildingIds: string[]; alerts: string[]; alertDigest: string;

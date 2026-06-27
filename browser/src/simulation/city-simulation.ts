@@ -96,6 +96,14 @@ interface PolicyPreviewMetrics {
   policyBacklog: number;
 }
 
+interface AdministrationState {
+  load: number;
+  capacity: number;
+  utilization: number;
+  efficiency: number;
+  policyBacklog: number;
+}
+
 interface PolicyDefinition {
   label: string;
   shortLabel: string;
@@ -399,6 +407,20 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
       && simulation.metrics.healthCoverage >= 50
       && simulation.metrics.educationCoverage >= 50,
   },
+  {
+    id: 'administration-capacity',
+    title: '稳住行政容量',
+    description: '启用 2 项政策，并保持行政利用率与政策积压可控',
+    rewardCash: 820,
+    rewardExperience: 90,
+    isMet: (simulation) => {
+      const enabledPolicies = simulation.getPolicyStates().filter((policy) => policy.enabled).length;
+      return enabledPolicies >= 2
+        && simulation.metrics.administrationEfficiency >= 70
+        && simulation.metrics.administrationUtilization <= 90
+        && simulation.metrics.policyBacklog <= 35;
+    },
+  },
 ];
 
 const ZONE_COST = 120;
@@ -599,6 +621,8 @@ export class CitySimulation {
       roadCoverage: 0, serviceGapPressure: 0,
       parkingPressure: 0, walkability: 30, accidentRisk: 0,
       stormwaterResilience: 30, floodRisk: 0, policyBacklog: 0,
+      administrationLoad: 0, administrationCapacity: 105,
+      administrationUtilization: 0, administrationEfficiency: 100,
       landValue: 30,
       rentPressure: 0, housingCapacity: 0, buildingCount: 0,
       unlockedBuildingIds: ['community_park'],
@@ -880,7 +904,7 @@ export class CitySimulation {
     this.computeMetrics();
     const message = `${enabled ? '启用' : '关闭'}${definition.label}`;
     this.pushCityEvent(message);
-    return { changed: true, message };
+    return { changed: true, message: this.appendObjectiveRewards(message) };
   }
 
   getInsightStack(limit = 5): CityInsight[] {
@@ -907,6 +931,12 @@ export class CitySimulation {
         label: '预算',
         text: `${this.metrics.budgetFocus}${this.metrics.budgetStress}: ${this.metrics.budgetAction}`,
         priority: this.metrics.budgetStress >= 35 ? 680 + this.metrics.budgetStress : 0,
+      },
+      {
+        id: 'administration',
+        label: '行政',
+        text: `利用率${this.metrics.administrationUtilization}%/积压${this.metrics.policyBacklog}: ${this.metrics.administrationUtilization > 90 ? '升级城市或关闭低优先级政策' : '政策执行可控'}`,
+        priority: this.metrics.administrationUtilization >= 75 || this.metrics.policyBacklog >= 35 ? 670 + Math.max(this.metrics.administrationUtilization, this.metrics.policyBacklog) : 0,
       },
       {
         id: 'growth',
@@ -1159,7 +1189,7 @@ export class CitySimulation {
   private buildPolicyPreviewMetrics(policies: CityPolicy[]): PolicyPreviewMetrics {
     const stats = this.calculateGridStats();
     const policyEffect = this.getPolicyEffect(policies);
-    const policyBacklog = this.calculatePolicyBacklog(policies);
+    const policyBacklog = this.calculateAdministration(stats, policies).policyBacklog;
     const roadCoverage = stats.zonedTiles === 0 ? 0 : Math.min(100, (stats.roadCapacity / stats.zonedTiles) * 80);
     const baseCongestion = stats.developedZoneTiles === 0 ? 0 : stats.developedZoneTiles * 5 - stats.roadCapacity * 8;
     const congestion = this.clampPercent(baseCongestion + policyEffect.congestion + policyBacklog * 0.08);
@@ -1208,11 +1238,22 @@ export class CitySimulation {
     return effect;
   }
 
-  private calculatePolicyBacklog(policies: CityPolicy[]): number {
+  private calculateAdministration(stats: GridStats, policies: CityPolicy[]): AdministrationState {
     const policyCount = new Set(policies).size;
-    const administrativeCapacity = Math.max(2, this.metrics.cityLevel + 1);
-    const overload = Math.max(0, policyCount - administrativeCapacity);
-    return this.clampPercent(policyCount * 3 + overload * 18);
+    const load = Math.round(
+      this.metrics.population * 0.04
+      + stats.zonedTiles * 3
+      + stats.developedZoneTiles * 2
+      + stats.serviceBuildings * 8
+      + policyCount * 28,
+    );
+    const capacity = Math.round(70 + this.metrics.cityLevel * 35 + Math.min(45, stats.serviceBuildings * 10));
+    const utilization = capacity <= 0 ? 0 : this.clampPercent((load / capacity) * 100);
+    const overload = Math.max(0, utilization - 85);
+    const policyOverload = Math.max(0, policyCount - Math.max(2, this.metrics.cityLevel + 1));
+    const policyBacklog = this.clampPercent(policyCount * 3 + policyOverload * 12 + overload * 1.1);
+    const efficiency = this.clampPercent(100 - Math.max(0, utilization - 65) * 0.75 - policyBacklog * 0.22);
+    return { load, capacity, utilization, efficiency, policyBacklog };
   }
 
   private formatPolicyDelta(label: string, delta: number, prefix = ''): string {
@@ -1414,6 +1455,13 @@ export class CitySimulation {
         return '选公园工具，建在道路旁。';
       case 'balanced-services':
         return this.getServiceCoverageAdvice();
+      case 'administration-capacity': {
+        const enabledPolicies = this.getPolicyStates().filter((policy) => policy.enabled).length;
+        if (enabledPolicies < 2) return '启用 2 项城市政策，观察行政容量。';
+        if (this.metrics.administrationUtilization > 90) return '行政利用率过高，先升级城市或关闭低优先级政策。';
+        if (this.metrics.policyBacklog > 35) return '政策积压偏高，暂缓继续加政策。';
+        return '行政效率达标，等待目标结算。';
+      }
       default:
         return '继续扩建城市并优化路网。';
     }
@@ -1496,7 +1544,8 @@ export class CitySimulation {
   private computeMetrics(): void {
     const stats = this.calculateGridStats();
     const policyEffect = this.getPolicyEffect();
-    const policyBacklog = this.calculatePolicyBacklog(this.activePolicies);
+    const administration = this.calculateAdministration(stats, this.activePolicies);
+    const policyBacklog = administration.policyBacklog;
     const roadCoverage = stats.zonedTiles === 0 ? 0 : Math.min(100, (stats.roadCapacity / stats.zonedTiles) * 80);
     const baseCongestion = stats.developedZoneTiles === 0 ? 0 : stats.developedZoneTiles * 5 - stats.roadCapacity * 8;
     const congestion = this.clampPercent(baseCongestion + policyEffect.congestion + policyBacklog * 0.08);
@@ -1541,6 +1590,10 @@ export class CitySimulation {
     this.metrics.stormwaterResilience = stormwaterResilience;
     this.metrics.floodRisk = floodRisk;
     this.metrics.policyBacklog = policyBacklog;
+    this.metrics.administrationLoad = administration.load;
+    this.metrics.administrationCapacity = administration.capacity;
+    this.metrics.administrationUtilization = administration.utilization;
+    this.metrics.administrationEfficiency = administration.efficiency;
     this.metrics.taxLevel = this.taxLevel;
     this.metrics.taxRatePercent = taxRatePercent;
     this.metrics.landValue = landValue;
@@ -1552,8 +1605,8 @@ export class CitySimulation {
     this.metrics.demandDriver = demand.driver;
     this.metrics.demandAction = demand.action;
     this.metrics.demandUrgency = demand.urgency;
-    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
-    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 - pollution * 0.2 - floodRisk * 0.06)));
+    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 + administration.efficiency * 0.04 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
+    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 - pollution * 0.2 - floodRisk * 0.06)));
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
@@ -1798,6 +1851,7 @@ export class CitySimulation {
     if (this.metrics.parkingPressure > 65) alerts.push('停车压力偏高');
     if (this.metrics.accidentRisk > 55) alerts.push('道路安全风险');
     if (this.metrics.floodRisk > 60) alerts.push('内涝风险上升');
+    if (this.metrics.administrationUtilization > 90) alerts.push('行政容量满载');
     if (this.metrics.policyBacklog > 55) alerts.push('政策执行积压');
     if (this.metrics.cash < 5000) alerts.push('现金储备偏低');
     if (this.getStorageUsed() >= STORAGE_CAPACITY) alerts.push('仓库容量已满');
@@ -1824,6 +1878,7 @@ export class CitySimulation {
     if (alert.includes('污染')) return 88;
     if (alert.includes('内涝')) return 86;
     if (alert.includes('道路容量') || alert.includes('拥堵')) return 82;
+    if (alert.includes('行政')) return 81;
     if (alert.includes('政策')) return 80;
     if (alert.includes('公共服务')) return 78;
     if (alert.includes('安全')) return 76;
@@ -1846,7 +1901,7 @@ export class CitySimulation {
 
   private estimateMonthlyBudgetForPolicies(stats: GridStats, pollution: number, policies: CityPolicy[]): MonthlyBudget {
     const policyEffect = this.getPolicyEffect(policies);
-    const policyBacklogCost = Math.round(this.calculatePolicyBacklog(policies) * 1.4);
+    const policyBacklogCost = Math.round(this.calculateAdministration(stats, policies).policyBacklog * 1.4);
     const policyNet = policyEffect.monthlyNet - policyBacklogCost;
     const income = Math.floor(this.metrics.population * this.getTaxRatePercent() * 0.16 + stats.jobs * 3);
     const roadCost = stats.roads * 4;
