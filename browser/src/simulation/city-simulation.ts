@@ -53,6 +53,23 @@ interface RiskForecast {
   cashRunwayDays: number;
 }
 
+interface MonthlyBudget {
+  income: number;
+  roadCost: number;
+  zoningCost: number;
+  populationCost: number;
+  pollutionCost: number;
+  expenses: number;
+  net: number;
+}
+
+interface BudgetBreakdownAdvisor {
+  stress: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 interface ServiceGapAdvisor {
   score: number;
   focus: string;
@@ -363,6 +380,10 @@ export class CitySimulation {
       forecastFocus: '稳定',
       forecastAction: '继续扩建并保留现金缓冲',
       cashRunwayDays: 999,
+      budgetStress: 0,
+      budgetFocus: '稳定',
+      budgetDriver: '月度现金流稳定',
+      budgetAction: '保留现金缓冲',
       serviceGapAdvisorScore: 0,
       serviceGapAdvisorFocus: '均衡',
       serviceGapAdvisorDriver: '暂无住宅服务压力',
@@ -1010,7 +1031,7 @@ export class CitySimulation {
     const taxPressure = taxRatePercent - 9;
     const landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
     const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure);
-    const monthlyCashFlow = this.estimateMonthlyCashFlow(stats, pollution);
+    const budget = this.estimateMonthlyBudget(stats, pollution);
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
     const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
 
@@ -1040,11 +1061,16 @@ export class CitySimulation {
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
-    const forecast = this.createRiskForecast(stats, monthlyCashFlow);
+    const forecast = this.createRiskForecast(stats, budget.net);
+    const budgetAdvisor = this.createBudgetBreakdownAdvisor(budget);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
     this.metrics.cashRunwayDays = forecast.cashRunwayDays;
+    this.metrics.budgetStress = budgetAdvisor.stress;
+    this.metrics.budgetFocus = budgetAdvisor.focus;
+    this.metrics.budgetDriver = budgetAdvisor.driver;
+    this.metrics.budgetAction = budgetAdvisor.action;
     this.metrics.serviceGapAdvisorScore = serviceAdvisor.score;
     this.metrics.serviceGapAdvisorFocus = serviceAdvisor.focus;
     this.metrics.serviceGapAdvisorDriver = serviceAdvisor.driver;
@@ -1266,9 +1292,53 @@ export class CitySimulation {
   }
 
   private estimateMonthlyCashFlow(stats: GridStats, pollution: number): number {
+    return this.estimateMonthlyBudget(stats, pollution).net;
+  }
+
+  private estimateMonthlyBudget(stats: GridStats, pollution: number): MonthlyBudget {
     const income = Math.floor(this.metrics.population * this.getTaxRatePercent() * 0.16 + stats.jobs * 3);
-    const expenses = Math.floor(stats.roads * 4 + stats.zonedTiles * 3 + this.metrics.population * 0.6 + pollution);
-    return income - expenses;
+    const roadCost = stats.roads * 4;
+    const zoningCost = stats.zonedTiles * 3;
+    const populationCost = Math.floor(this.metrics.population * 0.6);
+    const pollutionCost = Math.floor(pollution);
+    const expenses = roadCost + zoningCost + populationCost + pollutionCost;
+    return { income, roadCost, zoningCost, populationCost, pollutionCost, expenses, net: income - expenses };
+  }
+
+  private createBudgetBreakdownAdvisor(budget: MonthlyBudget): BudgetBreakdownAdvisor {
+    const topExpense = [
+      { focus: '道路维护', amount: budget.roadCost, action: '暂缓铺路，优先升级瓶颈' },
+      { focus: '分区维护', amount: budget.zoningCost, action: '先消化已划分地块' },
+      { focus: '人口服务', amount: budget.populationCost, action: '交付订单补现金缓冲' },
+      { focus: '污染治理', amount: budget.pollutionCost, action: '分散工业并补公园' },
+    ].sort((a, b) => b.amount - a.amount)[0];
+
+    const deficitRatio = budget.net < 0 ? Math.min(1, Math.abs(budget.net) / Math.max(1, budget.income)) : 0;
+    const stress = this.metrics.cash < 0
+      ? 100
+      : budget.net < 0
+        ? Math.round(55 + deficitRatio * 45)
+        : this.metrics.cash < 5000
+          ? 48
+          : Math.round(Math.min(35, (budget.expenses / Math.max(1, budget.income)) * 20));
+
+    if (stress < 35) {
+      return {
+        stress,
+        focus: '稳定',
+        driver: `月净现金+$${budget.net}`,
+        action: '保持现金缓冲',
+      };
+    }
+
+    return {
+      stress,
+      focus: topExpense.focus,
+      driver: budget.net < 0
+        ? `${topExpense.focus}支出$${topExpense.amount}，月净现金$${budget.net}`
+        : `${topExpense.focus}是最大支出$${topExpense.amount}`,
+      action: topExpense.action,
+    };
   }
 
   private createRiskForecast(stats: GridStats, monthlyCashFlow: number): RiskForecast {

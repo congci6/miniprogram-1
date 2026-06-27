@@ -512,7 +512,7 @@ class WeChatCityGame {
       `需求: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}`,
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),
       `服务: 园${Math.round(m.parkCoverage)} 医${Math.round(m.healthCoverage)} 学${Math.round(m.educationCoverage)}`,
-      this.compactText(`风险: ${m.forecastFocus}${m.forecastRisk} -> ${m.forecastAction}`, 28),
+      this.compactText(`风险/预算: ${m.forecastFocus}${m.forecastRisk}/${m.budgetFocus}${m.budgetStress}`, 28),
       this.selectedTile
         ? `地块: (${this.selectedTile.pos.x}, ${this.selectedTile.pos.y}) ${ZONE_LABELS[this.selectedTile.zone]}`
         : '地块: 未选择',
