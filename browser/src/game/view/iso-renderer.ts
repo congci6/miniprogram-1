@@ -74,13 +74,7 @@ export class IsometricRenderer {
     this.gfx.lineStyle(1, 0x333333, 0.25);
     this.gfx.strokeRect(wx - hw, wy - hh, this.TILE_W, this.TILE_H);
 
-    if (tile.roadId) {
-      this.gfx.fillStyle(0x2f3437, 0.9);
-      this.gfx.fillTriangle(wx, wy - hh * 0.38, wx - hw * 0.56, wy, wx, wy + hh * 0.38);
-      this.gfx.fillTriangle(wx, wy - hh * 0.38, wx + hw * 0.56, wy, wx, wy + hh * 0.38);
-      this.gfx.lineStyle(1, 0xf2d479, 0.5);
-      this.gfx.strokeRect(wx - hw * 0.42, wy - hh * 0.24, this.TILE_W * 0.84, this.TILE_H * 0.48);
-    }
+    if (tile.roadId) this.drawRoad(tile.roadId, wx, wy, hw, hh);
 
     this.drawServiceMarker(tile.buildingId, wx, wy);
 
@@ -97,6 +91,17 @@ export class IsometricRenderer {
     this.gfx.fillCircle(wx, wy - 8, 7);
     this.gfx.lineStyle(2, 0xffffff, 0.7);
     this.gfx.strokeCircle(wx, wy - 8, 7);
+  }
+
+  private drawRoad(roadId: string, wx: number, wy: number, hw: number, hh: number): void {
+    const arterial = roadId === 'arterial';
+    const roadWidth = arterial ? 0.5 : 0.38;
+    const roadLength = arterial ? 0.68 : 0.56;
+    this.gfx.fillStyle(arterial ? 0x22292f : 0x2f3437, 0.92);
+    this.gfx.fillTriangle(wx, wy - hh * roadWidth, wx - hw * roadLength, wy, wx, wy + hh * roadWidth);
+    this.gfx.fillTriangle(wx, wy - hh * roadWidth, wx + hw * roadLength, wy, wx, wy + hh * roadWidth);
+    this.gfx.lineStyle(arterial ? 2 : 1, arterial ? 0x8ec9ff : 0xf2d479, arterial ? 0.75 : 0.5);
+    this.gfx.strokeRect(wx - hw * (arterial ? 0.52 : 0.42), wy - hh * (arterial ? 0.32 : 0.24), this.TILE_W * (arterial ? 1.04 : 0.84), this.TILE_H * (arterial ? 0.64 : 0.48));
   }
 
   private getColor(zone: ZoneType, terrain: TerrainType): number {

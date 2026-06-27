@@ -40,7 +40,7 @@ interface ToolButton {
 }
 
 interface ActionButton {
-  kind: 'produce' | 'fulfillOrder' | 'upgrade';
+  kind: 'produce' | 'fulfillOrder' | 'upgrade' | 'upgradeRoad';
   label: string;
   x: number;
   y: number;
@@ -97,6 +97,10 @@ const SERVICE_MARKER_COLORS: Record<string, string> = {
   community_park: '#8fe06f',
   community_clinic: '#ff7f9f',
   community_school: '#f2d479',
+};
+const ROAD_LABELS: Record<string, string> = {
+  local: '普通道路',
+  arterial: '主干道',
 };
 
 class WeChatCityGame {
@@ -230,7 +234,7 @@ class WeChatCityGame {
         if (!tile) continue;
         const pos = this.tileToWorld(x, y);
         this.drawDiamond(pos.x, pos.y, this.colorForTile(tile), '#243b2c', 0.94);
-        if (tile.roadId) this.drawRoad(pos.x, pos.y);
+        if (tile.roadId) this.drawRoad(tile.roadId, pos.x, pos.y);
         this.drawServiceMarker(tile, pos.x, pos.y);
       }
     }
@@ -258,17 +262,18 @@ class WeChatCityGame {
     this.ctx.restore();
   }
 
-  private drawRoad(x: number, y: number): void {
+  private drawRoad(roadId: string, x: number, y: number): void {
+    const arterial = roadId === 'arterial';
     this.ctx.beginPath();
-    this.ctx.moveTo(x, y - TILE_H * 0.2);
-    this.ctx.lineTo(x + TILE_W * 0.34, y);
-    this.ctx.lineTo(x, y + TILE_H * 0.2);
-    this.ctx.lineTo(x - TILE_W * 0.34, y);
+    this.ctx.moveTo(x, y - TILE_H * (arterial ? 0.28 : 0.2));
+    this.ctx.lineTo(x + TILE_W * (arterial ? 0.42 : 0.34), y);
+    this.ctx.lineTo(x, y + TILE_H * (arterial ? 0.28 : 0.2));
+    this.ctx.lineTo(x - TILE_W * (arterial ? 0.42 : 0.34), y);
     this.ctx.closePath();
-    this.ctx.fillStyle = '#2d3437';
+    this.ctx.fillStyle = arterial ? '#22292f' : '#2d3437';
     this.ctx.fill();
-    this.ctx.strokeStyle = 'rgba(242,212,121,0.55)';
-    this.ctx.lineWidth = 1;
+    this.ctx.strokeStyle = arterial ? 'rgba(142,201,255,0.78)' : 'rgba(242,212,121,0.55)';
+    this.ctx.lineWidth = arterial ? 2 : 1;
     this.ctx.stroke();
   }
 
@@ -318,7 +323,7 @@ class WeChatCityGame {
         ? `地块: (${this.selectedTile.pos.x}, ${this.selectedTile.pos.y}) ${ZONE_LABELS[this.selectedTile.zone]}`
         : '地块: 未选择',
       this.selectedTile
-        ? `地形: ${TERRAIN_LABELS[this.selectedTile.terrain]} 道路: ${this.selectedTile.roadId ? '已连接' : '无'}`
+        ? `地形: ${TERRAIN_LABELS[this.selectedTile.terrain]} 道路: ${this.selectedTile.roadId ? (ROAD_LABELS[this.selectedTile.roadId] ?? '已连接') : '无'}`
         : '点击地图查看详情',
       this.selectedTile?.buildingId
         ? `建筑: ${SERVICE_BUILDING_LABELS[this.selectedTile.buildingId] ?? this.selectedTile.buildingId}`
@@ -455,6 +460,14 @@ class WeChatCityGame {
       width: 86,
       height: 28,
     });
+    this.actionButtons.push({
+      kind: 'upgradeRoad',
+      label: '升道路',
+      x: x + 176,
+      y: y + 36,
+      width: 66,
+      height: 28,
+    });
   }
 
   private handleAction(button: ActionButton): void {
@@ -464,7 +477,9 @@ class WeChatCityGame {
         ? this.sim.fulfillOrder(button.orderId)
         : button.kind === 'upgrade' && this.selectedTile
           ? this.sim.upgradeResidentialAt(this.selectedTile.pos.x, this.selectedTile.pos.y)
-          : { changed: false, message: '请先选择住宅地块' };
+          : button.kind === 'upgradeRoad' && this.selectedTile
+            ? this.sim.upgradeRoadAt(this.selectedTile.pos.x, this.selectedTile.pos.y)
+            : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
     this.statusText = result.message;
     if (result.changed) {
       this.vibrate('light');

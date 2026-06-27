@@ -35,6 +35,11 @@ const SERVICE_BUILDING_LABELS: Record<string, string> = {
   community_school: '社区学校',
 };
 
+const ROAD_LABELS: Record<string, string> = {
+  local: '普通道路',
+  arterial: '主干道',
+};
+
 const ZONE_LABELS: Record<ZoneType, string> = {
   [ZoneType.None]: '未规划',
   [ZoneType.Residential]: '住宅区',
@@ -181,7 +186,7 @@ export class HUD {
         (this.selectedTile.buildingId
           ? '<br>建筑: ' + (SERVICE_BUILDING_LABELS[this.selectedTile.buildingId] ?? this.selectedTile.buildingId)
           : '') +
-        '<br>道路: ' + (this.selectedTile.roadId ? '已连接' : '无') +
+        '<br>道路: ' + (this.selectedTile.roadId ? (ROAD_LABELS[this.selectedTile.roadId] ?? '已连接') : '无') +
         (this.selectedTile.zone === ZoneType.Residential
           ? '<br>住宅等级: ' + this.residentialLevelLabel(this.selectedTile)
           : '')
@@ -225,8 +230,9 @@ export class HUD {
       this.orders.map((order) => this.orderHtml(order)).join('') +
       '<br><strong>城市目标</strong><br>' +
       this.objectives.map((objective) => this.objectiveHtml(objective)).join('') +
-      '<div style="margin-top:8px">' +
+      '<div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">' +
       '<button data-action="upgrade" style="' + this.actionButtonStyle('#6ea85f') + '">升级选中住宅</button>' +
+      '<button data-action="upgrade-road" style="' + this.actionButtonStyle('#3f5f82') + '">升级选中道路</button>' +
       '</div>';
 
     this.managementPanel.querySelectorAll<HTMLButtonElement>('button[data-material]').forEach((button) => {
@@ -242,6 +248,8 @@ export class HUD {
     });
     this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade"]')
       ?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('city-upgrade-selected-residential')));
+    this.managementPanel.querySelector<HTMLButtonElement>('button[data-action="upgrade-road"]')
+      ?.addEventListener('click', () => window.dispatchEvent(new CustomEvent('city-upgrade-selected-road')));
   }
 
   private productionButtonHtml(materialId: MaterialId): string {

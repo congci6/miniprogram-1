@@ -60,6 +60,19 @@ export class GameScene extends Phaser.Scene {
       }));
       this.publishMetrics(result.message);
     });
+    window.addEventListener('city-upgrade-selected-road', () => {
+      if (!this.selectedTile) {
+        this.publishMetrics('请先选择一段道路');
+        return;
+      }
+      const result = this.sim.upgradeRoadAt(this.selectedTile.x, this.selectedTile.y);
+      if (result.changed) this.isoRender.render();
+      if (result.changed) this.save();
+      window.dispatchEvent(new CustomEvent('city-tile-selected', {
+        detail: { tile: this.sim.grid.getTile(this.selectedTile.x, this.selectedTile.y), message: result.message },
+      }));
+      this.publishMetrics(result.message);
+    });
 
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.applyToolAtPointer(p));
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {

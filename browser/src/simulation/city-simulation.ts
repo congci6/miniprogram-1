@@ -17,6 +17,8 @@ import {
 
 interface GridStats {
   roads: number;
+  upgradedRoads: number;
+  roadCapacity: number;
   zonedTiles: number;
   housingCapacity: number;
   jobs: number;
@@ -179,6 +181,13 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     isMet: (_simulation, stats) => stats.roads >= 1,
   },
   {
+    id: 'first-arterial',
+    title: '升级第一条主干道',
+    description: '把任意道路升级为主干道，提高通行容量',
+    rewardCash: 540,
+    isMet: (_simulation, stats) => stats.upgradedRoads >= 1,
+  },
+  {
     id: 'first-neighborhood',
     title: '形成第一片社区',
     description: '规划 2 个住宅地块，打开人口增长',
@@ -226,11 +235,20 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
 
 const ZONE_COST = 120;
 const ROAD_COST = 180;
+const ROAD_UPGRADE_COST = 360;
 const ERASE_COST = 20;
 const STORAGE_CAPACITY = 30;
 const MAX_RESIDENTIAL_LEVEL = 3;
 const OFFLINE_MS_PER_DAY = 60_000;
 const MAX_OFFLINE_DAYS = 72;
+const ROAD_CAPACITY: Record<string, number> = {
+  local: 1,
+  arterial: 3,
+};
+const ROAD_LABELS: Record<string, string> = {
+  local: '普通道路',
+  arterial: '主干道',
+};
 
 export class CitySimulation {
   readonly grid: CityGrid;
@@ -380,6 +398,18 @@ export class CitySimulation {
     return { changed: true, message: this.appendObjectiveRewards(`住宅升级到 ${nextLevel} 级 +$${220 * nextLevel}`) };
   }
 
+  upgradeRoadAt(x: number, y: number): PlanningActionResult {
+    const tile = this.grid.getTile(x, y);
+    if (!tile) return { changed: false, message: '地块不在地图内' };
+    if (!tile.roadId) return { changed: false, message: '请选择道路地块升级' };
+    if (tile.roadId === 'arterial') return { changed: false, message: '这条道路已经是主干道' };
+    if (!this.trySpend(ROAD_UPGRADE_COST)) return { changed: false, message: '现金不足，无法升级道路' };
+
+    this.grid.setRoad(x, y, 'arterial');
+    this.computeMetrics();
+    return { changed: true, message: this.appendObjectiveRewards(`道路升级为主干道 -$${ROAD_UPGRADE_COST}`) };
+  }
+
   getProductionSlots(): number {
     const industrialTiles = this.calculateGridStats().industrialTiles;
     return Math.min(4, Math.max(1, 1 + Math.floor(industrialTiles / 2)));
@@ -401,6 +431,10 @@ export class CitySimulation {
 
   getServiceBuildingLabel(buildingId: string): string {
     return SERVICE_LABELS[buildingId as ServiceBuildingId] ?? '';
+  }
+
+  getRoadLabel(roadId: string): string {
+    return ROAD_LABELS[roadId] ?? (roadId ? roadId : '无');
   }
 
   getObjectives(): CityObjective[] {
@@ -600,8 +634,8 @@ export class CitySimulation {
 
   private computeMetrics(): void {
     const stats = this.calculateGridStats();
-    const roadCoverage = stats.zonedTiles === 0 ? 0 : Math.min(100, (stats.roads / stats.zonedTiles) * 120);
-    const congestion = stats.zonedTiles === 0 ? 0 : Math.max(0, Math.min(100, stats.zonedTiles * 4 - stats.roads * 9));
+    const roadCoverage = stats.zonedTiles === 0 ? 0 : Math.min(100, (stats.roadCapacity / stats.zonedTiles) * 80);
+    const congestion = stats.zonedTiles === 0 ? 0 : Math.max(0, Math.min(100, stats.zonedTiles * 5 - stats.roadCapacity * 8));
     const pollution = Math.max(0, Math.min(100, stats.pollution));
     const parkCoverage = stats.residentialTiles === 0 ? 0 : Math.min(100, (stats.parkCoveredResidentialTiles / stats.residentialTiles) * 100);
     const healthCoverage = stats.residentialTiles === 0 ? 0 : Math.min(100, (stats.healthCoveredResidentialTiles / stats.residentialTiles) * 100);
@@ -635,6 +669,8 @@ export class CitySimulation {
   private calculateGridStats(): GridStats {
     const stats: GridStats = {
       roads: 0,
+      upgradedRoads: 0,
+      roadCapacity: 0,
       zonedTiles: 0,
       housingCapacity: 0,
       jobs: 0,
@@ -653,7 +689,11 @@ export class CitySimulation {
       for (let x = 0; x < this.grid.width; x++) {
         const tile = this.grid.getTile(x, y);
         if (!tile) continue;
-        if (tile.roadId) stats.roads++;
+        if (tile.roadId) {
+          stats.roads++;
+          stats.roadCapacity += ROAD_CAPACITY[tile.roadId] ?? 1;
+          if (tile.roadId === 'arterial') stats.upgradedRoads++;
+        }
         const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
         if (service) {
           stats.serviceBuildings++;
@@ -689,6 +729,7 @@ export class CitySimulation {
   private createAlerts(stats: GridStats): string[] {
     const alerts: string[] = [];
     if (stats.zonedTiles > 0 && stats.roads < Math.ceil(stats.zonedTiles / 4)) alerts.push('道路覆盖不足');
+    if (this.metrics.congestion > 35) alerts.push('道路容量不足');
     if (stats.housingCapacity === 0) alerts.push('需要规划住宅区');
     if (stats.jobs < Math.floor(this.metrics.population * 0.35)) alerts.push('就业岗位偏少');
     if (this.metrics.pollution > 55) alerts.push('污染压力上升');
