@@ -499,10 +499,10 @@ class WeChatCityGame {
   private drawSidePanel(): void {
     const m = this.sim.metrics;
     const x = 12;
-    const y = this.height - 220;
+    const y = this.height - 236;
     const width = 238;
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
-    this.roundRect(x, y, width, 202, 6);
+    this.roundRect(x, y, width, 218, 6);
     this.ctx.fill();
 
     const lines = [
@@ -525,6 +525,7 @@ class WeChatCityGame {
       this.selectedTile?.zone === ZoneType.Residential
         ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile) || '待开发'}`
         : `订单交付: ${this.sim.completedOrders}`,
+      this.compactText(`事件: ${m.recentEvents[0] ?? '暂无'}`, 22),
       m.alerts.length ? `提醒: ${m.alerts.slice(0, 2).join('、')}` : '提醒: 城市运行平稳',
     ];
 
@@ -826,6 +827,10 @@ class WeChatCityGame {
     return (Object.keys(MATERIAL_LABELS) as MaterialId[])
       .map((materialId) => `${MATERIAL_LABELS[materialId]}${this.sim.materials[materialId]}`)
       .join(' ');
+  }
+
+  private compactText(text: string, maxChars: number): string {
+    return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars - 3))}...` : text;
   }
 
   private formatCost(cost: MaterialCost): string {

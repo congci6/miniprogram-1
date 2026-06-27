@@ -222,6 +222,10 @@ export class HUD {
       return;
     }
 
+    const recentEventsText = metrics.recentEvents.length
+      ? '<br>近期事件:<br>' + metrics.recentEvents.slice(0, 2).join('<br>')
+      : '';
+
     this.sidePanel.innerHTML =
       '等级: Lv ' + metrics.cityLevel + ' ' + metrics.cityLevelName + '<br>' +
       '住房容量: ' + metrics.housingCapacity.toLocaleString() + '<br>' +
@@ -232,7 +236,8 @@ export class HUD {
       '服务覆盖: 园' + Math.round(metrics.parkCoverage) + '% / 医' + Math.round(metrics.healthCoverage) + '% / 学' + Math.round(metrics.educationCoverage) + '%<br>' +
       '污染: ' + Math.round(metrics.pollution) + ' / 拥堵: ' + Math.round(metrics.congestion) +
       tileText +
-      (metrics.alerts.length ? '<br>提醒: ' + metrics.alerts.join('、') : '');
+      (metrics.alerts.length ? '<br>提醒: ' + metrics.alerts.join('、') : '') +
+      recentEventsText;
   }
 
   private renderManagementPanel(): void {

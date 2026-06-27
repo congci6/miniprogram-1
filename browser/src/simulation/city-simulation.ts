@@ -255,6 +255,7 @@ const ROAD_UPGRADE_COST = 360;
 const ERASE_COST = 20;
 const STORAGE_CAPACITY = 30;
 const MAX_RESIDENTIAL_LEVEL = 3;
+const MAX_RECENT_EVENTS = 5;
 const ROAD_UPGRADE_UNLOCK_LEVEL = 2;
 const RESIDENTIAL_UPGRADE_UNLOCK_LEVELS: Record<number, number> = {
   2: 2,
@@ -328,6 +329,7 @@ export class CitySimulation {
       rentPressure: 0, housingCapacity: 0, buildingCount: 0,
       unlockedBuildingIds: ['community_park'],
       alerts: [],
+      recentEvents: [],
     };
   }
 
@@ -337,7 +339,7 @@ export class CitySimulation {
     while (this.dayAccumulator >= 1) {
       this.dayAccumulator -= 1;
       this.metrics.day++;
-      this.processProductionDay();
+      if (this.processProductionDay()) changed = true;
       this.computeMetrics();
       if (this.processZoneDevelopment()) {
         changed = true;
@@ -369,6 +371,7 @@ export class CitySimulation {
       if (!this.trySpend(ROAD_COST)) return { changed: false, message: '现金不足，无法修建道路' };
       this.grid.setRoad(x, y, 'local');
       this.computeMetrics();
+      this.pushCityEvent(`修建道路 (${x},${y})`);
       return { changed: true, message: this.appendObjectiveRewards(`修建道路 -$${ROAD_COST}`, ACTION_EXPERIENCE.road) };
     }
 
@@ -379,6 +382,7 @@ export class CitySimulation {
       if (!this.trySpend(ERASE_COST)) return { changed: false, message: '现金不足，无法清理地块' };
       this.grid.clearPlanning(x, y);
       this.computeMetrics();
+      this.pushCityEvent(`清理地块 (${x},${y})`);
       return { changed: true, message: this.appendObjectiveRewards(`清理地块 -$${ERASE_COST}`) };
     }
 
@@ -393,6 +397,7 @@ export class CitySimulation {
 
     this.grid.setZone(x, y, zone);
     this.computeMetrics();
+    this.pushCityEvent(`划定${stats.label} (${x},${y})`);
     return { changed: true, message: this.appendObjectiveRewards(`划定${stats.label} -$${ZONE_COST}`, ACTION_EXPERIENCE.zone) };
   }
 
@@ -419,6 +424,7 @@ export class CitySimulation {
       remainingDays: recipe.days,
       totalDays: recipe.days,
     });
+    this.pushCityEvent(`${recipe.label}开始生产`);
     return { changed: true, message: this.appendObjectiveRewards(`${recipe.label}已排产 -$${recipe.cashCost}`, ACTION_EXPERIENCE.production) };
   }
 
@@ -435,6 +441,7 @@ export class CitySimulation {
     this.orders.splice(this.orders.indexOf(order), 1);
     this.ensureOrders();
     this.computeMetrics();
+    this.pushCityEvent(`${order.title}交付`);
     return { changed: true, message: this.appendObjectiveRewards(`${order.title}交付 +$${order.rewardCash}`, ACTION_EXPERIENCE.order) };
   }
 
@@ -460,6 +467,7 @@ export class CitySimulation {
     this.grid.setBuilding(x, y, `residential_l${nextLevel}`);
     this.metrics.cash += 220 * nextLevel;
     this.computeMetrics();
+    this.pushCityEvent(`住宅升级到${nextLevel}级 (${x},${y})`);
     return { changed: true, message: this.appendObjectiveRewards(`住宅升级到 ${nextLevel} 级 +$${220 * nextLevel}`, ACTION_EXPERIENCE.residentialUpgrade) };
   }
 
@@ -475,6 +483,7 @@ export class CitySimulation {
 
     this.grid.setRoad(x, y, 'arterial');
     this.computeMetrics();
+    this.pushCityEvent(`道路升级为主干道 (${x},${y})`);
     return { changed: true, message: this.appendObjectiveRewards(`道路升级为主干道 -$${ROAD_UPGRADE_COST}`, ACTION_EXPERIENCE.roadUpgrade) };
   }
 
@@ -581,6 +590,7 @@ export class CitySimulation {
       metrics: {
         ...this.metrics,
         alerts: [...this.metrics.alerts],
+        recentEvents: [...this.metrics.recentEvents],
         unlockedBuildingIds: [...this.metrics.unlockedBuildingIds],
       },
       materials: { ...this.materials },
@@ -599,6 +609,7 @@ export class CitySimulation {
     if (snapshot.version !== 1 && snapshot.version !== 2 && snapshot.version !== 3) return offlineResult;
 
     Object.assign(this.metrics, snapshot.metrics);
+    this.metrics.recentEvents = this.normalizeRecentEvents((snapshot.metrics as Partial<CityMetrics>).recentEvents);
     this.metrics.cityExperience = Math.max(0, this.metrics.cityExperience ?? 0);
     this.taxLevel = this.isTaxLevel(snapshot.metrics.taxLevel)
       ? snapshot.metrics.taxLevel
@@ -657,6 +668,7 @@ export class CitySimulation {
 
     this.taxLevel = level;
     this.computeMetrics();
+    this.pushCityEvent(`税率调整为 ${this.getTaxRatePercent()}%`);
     return { changed: true, message: `税率调整为 ${this.getTaxRatePercent()}%` };
   }
 
@@ -666,7 +678,8 @@ export class CitySimulation {
     return true;
   }
 
-  private processProductionDay(): void {
+  private processProductionDay(): boolean {
+    let changed = false;
     for (let i = this.productionQueue.length - 1; i >= 0; i--) {
       const job = this.productionQueue[i];
       job.remainingDays = Math.max(0, job.remainingDays - 1);
@@ -677,7 +690,10 @@ export class CitySimulation {
       }
       this.materials[job.materialId]++;
       this.productionQueue.splice(i, 1);
+      this.pushCityEvent(`${job.label}完成 +1`);
+      changed = true;
     }
+    return changed;
   }
 
   private processZoneDevelopment(): boolean {
@@ -707,6 +723,7 @@ export class CitySimulation {
       const tile = this.findVacantDevelopableZone(entry.zone);
       if (!tile) continue;
       this.grid.setBuilding(tile.x, tile.y, entry.buildingId);
+      this.pushCityEvent(`${ZONE_STATS[entry.zone]?.label ?? '分区'}自然开发 (${tile.x},${tile.y})`);
       return true;
     }
 
@@ -742,6 +759,7 @@ export class CitySimulation {
     this.grid.setZone(x, y, ZoneType.Civic);
     this.grid.setBuilding(x, y, serviceBuildingId);
     this.computeMetrics();
+    this.pushCityEvent(`建设${service.label} (${x},${y})`);
     return { changed: true, message: this.appendObjectiveRewards(`建设${service.label} -$${service.cashCost}`, ACTION_EXPERIENCE.service) };
   }
 
@@ -775,6 +793,22 @@ export class CitySimulation {
     };
   }
 
+  private normalizeRecentEvents(value: unknown): string[] {
+    if (!Array.isArray(value)) return [];
+    return value
+      .filter((event): event is string => typeof event === 'string' && event.trim().length > 0)
+      .slice(0, MAX_RECENT_EVENTS);
+  }
+
+  private pushCityEvent(message: string): void {
+    const trimmed = message.trim();
+    if (!trimmed) return;
+    const event = `第${this.metrics.day}天 ${trimmed}`;
+    const events = this.normalizeRecentEvents(this.metrics.recentEvents);
+    if (events[0] === event) return;
+    this.metrics.recentEvents = [event, ...events.filter((candidate) => candidate !== event)].slice(0, MAX_RECENT_EVENTS);
+  }
+
   private appendObjectiveRewards(message: string, experience = 0): string {
     const progressParts: string[] = [];
     if (experience > 0) {
@@ -797,6 +831,7 @@ export class CitySimulation {
       this.completedObjectiveIds.add(objective.id);
       this.metrics.cash += objective.rewardCash;
       this.grantExperience(objective.rewardExperience);
+      this.pushCityEvent(`目标完成：${objective.title}`);
       rewards.push(`${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}`);
     }
     return rewards;
