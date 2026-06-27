@@ -77,6 +77,13 @@ interface DistrictPriorityAdvisor {
   action: string;
 }
 
+interface HousingAffordabilityAdvisor {
+  score: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 interface ServiceGapAdvisor {
   score: number;
   focus: string;
@@ -402,6 +409,10 @@ export class CitySimulation {
       districtPriorityFocus: '起步',
       districtPriorityDriver: '等待首个片区成形',
       districtPriorityAction: '先接路规划住宅',
+      housingAffordabilityScore: 0,
+      housingAffordabilityFocus: '起步',
+      housingAffordabilityDriver: '等待住宅片区成形',
+      housingAffordabilityAction: '先接路规划住宅',
       serviceGapAdvisorScore: 0,
       serviceGapAdvisorFocus: '均衡',
       serviceGapAdvisorDriver: '暂无住宅服务压力',
@@ -1057,6 +1068,7 @@ export class CitySimulation {
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
     const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
     const commuteAdvisor = this.createCommuteCorridorAdvisor(stats, roadCoverage, congestion, demand, roadAdvisor);
+    const housingAdvisor = this.createHousingAffordabilityAdvisor(stats, demand, rentPressure, serviceCoverage, roadCoverage, landValue, taxPressure, commuteAdvisor);
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
@@ -1086,7 +1098,7 @@ export class CitySimulation {
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
     const forecast = this.createRiskForecast(stats, budget.net);
     const budgetAdvisor = this.createBudgetBreakdownAdvisor(budget);
-    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor);
+    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
@@ -1099,6 +1111,10 @@ export class CitySimulation {
     this.metrics.districtPriorityFocus = districtAdvisor.focus;
     this.metrics.districtPriorityDriver = districtAdvisor.driver;
     this.metrics.districtPriorityAction = districtAdvisor.action;
+    this.metrics.housingAffordabilityScore = housingAdvisor.score;
+    this.metrics.housingAffordabilityFocus = housingAdvisor.focus;
+    this.metrics.housingAffordabilityDriver = housingAdvisor.driver;
+    this.metrics.housingAffordabilityAction = housingAdvisor.action;
     this.metrics.serviceGapAdvisorScore = serviceAdvisor.score;
     this.metrics.serviceGapAdvisorFocus = serviceAdvisor.focus;
     this.metrics.serviceGapAdvisorDriver = serviceAdvisor.driver;
@@ -1380,6 +1396,7 @@ export class CitySimulation {
     serviceAdvisor: ServiceGapAdvisor,
     roadAdvisor: RoadHierarchyAdvisor,
     commuteAdvisor: CommuteCorridorAdvisor,
+    housingAdvisor: HousingAffordabilityAdvisor,
   ): DistrictPriorityAdvisor {
     const housingPressure = stats.housingCapacity === 0
       ? stats.roads > 0 || stats.zonedTiles > 0 ? 72 : 36
@@ -1406,6 +1423,12 @@ export class CitySimulation {
         focus: '通勤',
         driver: commuteAdvisor.driver,
         action: commuteAdvisor.action,
+      },
+      {
+        score: housingAdvisor.score,
+        focus: '住房',
+        driver: housingAdvisor.driver,
+        action: housingAdvisor.action,
       },
       {
         score: stats.residentialTiles >= 2 ? serviceAdvisor.score : 0,
@@ -1445,6 +1468,79 @@ export class CitySimulation {
         focus: '均衡',
         driver: '暂无高优先级片区压力',
         action: '按当前目标稳步扩建',
+      };
+    }
+
+    return {
+      score: Math.round(Math.min(100, candidates.score)),
+      focus: candidates.focus,
+      driver: candidates.driver,
+      action: candidates.action,
+    };
+  }
+
+  private createHousingAffordabilityAdvisor(
+    stats: GridStats,
+    demand: DemandAnalysis,
+    rentPressure: number,
+    serviceCoverage: number,
+    roadCoverage: number,
+    landValue: number,
+    taxPressure: number,
+    commuteAdvisor: CommuteCorridorAdvisor,
+  ): HousingAffordabilityAdvisor {
+    const targetHousing = Math.max(72, Math.ceil(this.metrics.population * 1.15 + stats.jobs * 0.55 + 48));
+    const housingGap = Math.max(0, targetHousing - stats.housingCapacity);
+    const capacityPressure = stats.housingCapacity === 0
+      ? stats.roads > 0 || stats.zonedTiles > 0 ? 78 : 42
+      : Math.min(100, (housingGap / Math.max(1, targetHousing)) * 85 + (demand.residential >= 75 ? 15 : 0));
+    const affordabilityPressure = Math.max(
+      rentPressure,
+      landValue >= 70 ? landValue - 25 : 0,
+      taxPressure > 0 ? 35 + taxPressure * 5 : 0,
+    );
+    const servicePressure = stats.residentialTiles >= 2 ? Math.max(0, 65 - serviceCoverage) : 0;
+    const accessPressure = stats.zonedTiles > 0 ? Math.max(0, 55 - roadCoverage) : 0;
+
+    const candidates = [
+      {
+        score: Math.round(capacityPressure),
+        focus: '容量',
+        driver: stats.housingCapacity === 0 ? '尚无可入住住宅容量' : `住房缺口${housingGap}`,
+        action: stats.roads > 0 ? demand.focus === '住宅' ? demand.action : '沿道路补住宅区' : '先铺路再规划住宅',
+      },
+      {
+        score: Math.round(affordabilityPressure),
+        focus: '负担',
+        driver: `租压${Math.round(rentPressure)} 地价${Math.round(landValue)}`,
+        action: taxPressure > 0 ? '降低税率缓和迁入压力' : '补住宅容量并保留服务',
+      },
+      {
+        score: Math.round(servicePressure),
+        focus: '宜居',
+        driver: `服务覆盖${Math.round(serviceCoverage)}%`,
+        action: '补公园、诊所或学校',
+      },
+      {
+        score: Math.round(accessPressure),
+        focus: '接入',
+        driver: `道路覆盖${Math.round(roadCoverage)}%`,
+        action: stats.roads > 0 ? '补道路接入住宅区' : '先铺第一段道路',
+      },
+      {
+        score: Math.round(commuteAdvisor.score * 0.7),
+        focus: '通勤',
+        driver: commuteAdvisor.driver,
+        action: commuteAdvisor.action,
+      },
+    ].sort((a, b) => b.score - a.score)[0];
+
+    if (candidates.score < 35) {
+      return {
+        score: Math.round(candidates.score),
+        focus: '可负担',
+        driver: '住房供给与迁入压力可控',
+        action: '随需求补住宅片区',
       };
     }
 

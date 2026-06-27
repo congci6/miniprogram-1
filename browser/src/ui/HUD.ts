@@ -276,6 +276,10 @@ export class HUD {
       ' / ' + (this.metrics?.districtPriorityFocus ?? '起步') +
       ' / ' + (this.metrics?.districtPriorityDriver ?? '等待首个片区成形') +
       ' -> ' + (this.metrics?.districtPriorityAction ?? '先接路规划住宅') + '</span><br><br>' +
+      '<span style="color:#f0d6a8">住房: ' + (this.metrics?.housingAffordabilityScore ?? 0) +
+      ' / ' + (this.metrics?.housingAffordabilityFocus ?? '起步') +
+      ' / ' + (this.metrics?.housingAffordabilityDriver ?? '等待住宅片区成形') +
+      ' -> ' + (this.metrics?.housingAffordabilityAction ?? '先接路规划住宅') + '</span><br><br>' +
       '<span style="color:#d6c7ff">服务短板: ' + (this.metrics?.serviceGapAdvisorFocus ?? '均衡') +
       ' ' + (this.metrics?.serviceGapAdvisorScore ?? 0) +
       ' / ' + (this.metrics?.serviceGapAdvisorDriver ?? '暂无住宅服务压力') +
