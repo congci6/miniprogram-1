@@ -265,7 +265,10 @@ export class HUD {
       '<strong>分区需求</strong> 住' + (this.metrics?.residentialDemand ?? 0) +
       ' / 商' + (this.metrics?.commercialDemand ?? 0) +
       ' / 工' + (this.metrics?.industrialDemand ?? 0) + '<br>' +
-      '<span style="color:#d8e6ba">' + (this.metrics?.demandAdvice ?? '') + '</span><br><br>' +
+      '<span style="color:#d8e6ba">' + (this.metrics?.demandAdvice ?? '') + '</span><br>' +
+      '<span style="color:#b8c7d9">焦点: ' + (this.metrics?.demandFocus ?? '均衡') +
+      ' / 驱动: ' + (this.metrics?.demandDriver ?? '供需稳定') +
+      ' / 行动: ' + (this.metrics?.demandAction ?? '继续优化路网') + '</span><br><br>' +
       '<strong>仓库</strong> ' + this.storageUsed + '/' + this.storageCapacity + '<br>' +
       inventoryText + '<br><br>' +
       '<strong>工厂</strong> ' + this.productionQueue.length + '/' + this.productionSlots + '<br>' +

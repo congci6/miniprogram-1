@@ -35,6 +35,17 @@ interface GridStats {
   educationCoveredResidentialTiles: number;
 }
 
+interface DemandAnalysis {
+  residential: number;
+  commercial: number;
+  industrial: number;
+  advice: string;
+  focus: string;
+  driver: string;
+  action: string;
+  urgency: number;
+}
+
 export interface PlanningActionResult {
   changed: boolean;
   message: string;
@@ -323,6 +334,10 @@ export class CitySimulation {
       taxLevel: CityTaxLevel.Normal, taxRatePercent: 9, congestion: 0, pollution: 0, crime: 0,
       residentialDemand: 0, commercialDemand: 0, industrialDemand: 0,
       demandAdvice: '沿道路规划住宅，打开第一批迁入需求。',
+      demandFocus: '住宅',
+      demandDriver: '住房缺口',
+      demandAction: '沿道路规划住宅区',
+      demandUrgency: 0,
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
@@ -978,6 +993,10 @@ export class CitySimulation {
     this.metrics.commercialDemand = demand.commercial;
     this.metrics.industrialDemand = demand.industrial;
     this.metrics.demandAdvice = demand.advice;
+    this.metrics.demandFocus = demand.focus;
+    this.metrics.demandDriver = demand.driver;
+    this.metrics.demandAction = demand.action;
+    this.metrics.demandUrgency = demand.urgency;
     this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 - pollution * 0.22 - rentPressure * 0.2 - taxPressure * 2)));
     this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 - pollution * 0.2)));
     this.refreshCityLevelProgress();
@@ -992,7 +1011,7 @@ export class CitySimulation {
     pollution: number,
     congestion: number,
     taxPressure: number,
-  ): { residential: number; commercial: number; industrial: number; advice: string } {
+  ): DemandAnalysis {
     const population = this.metrics.population;
     const targetHousing = Math.max(72, Math.ceil(population * 1.15 + stats.jobs * 0.55 + 48));
     const housingGap = targetHousing - stats.housingCapacity;
@@ -1001,8 +1020,74 @@ export class CitySimulation {
     const residential = this.clampPercent(48 + housingGap * 0.35 + serviceCoverage * 0.08 + roadCoverage * 0.08 - pollution * 0.18 - congestion * 0.12 - taxPressure * 4);
     const commercial = this.clampPercent(35 + population * 0.18 + landValue * 0.15 + roadCoverage * 0.1 - stats.jobs * 0.12 - congestion * 0.12 - taxPressure * 3);
     const industrial = this.clampPercent(42 + Math.max(0, jobGap) * 0.8 + stats.residentialTiles * 5 - stats.industrialTiles * 14 + roadCoverage * 0.08 - pollution * 0.2 - taxPressure * 2);
+    const advice = this.getDemandAdvice(residential, commercial, industrial);
+    const top = [
+      { key: 'residential', label: '住宅', value: residential },
+      { key: 'commercial', label: '商业', value: commercial },
+      { key: 'industrial', label: '工业', value: industrial },
+    ].sort((a, b) => b.value - a.value)[0];
 
-    return { residential, commercial, industrial, advice: this.getDemandAdvice(residential, commercial, industrial) };
+    let driver = '供需稳定';
+    let action = '补道路、服务和订单材料';
+    if (top.value < 45) {
+      return { residential, commercial, industrial, advice, focus: '均衡', driver, action, urgency: top.value };
+    }
+
+    if (top.key === 'residential') {
+      if (housingGap > 24) {
+        driver = '住房缺口';
+        action = '沿道路规划住宅区';
+      } else if (serviceCoverage < 45) {
+        driver = '服务覆盖不足';
+        action = '补公园、诊所或学校';
+      } else if (roadCoverage < 55) {
+        driver = '道路接入不足';
+        action = '先补道路再扩住宅';
+      } else if (pollution > 35) {
+        driver = '污染压低迁入';
+        action = '把工业远离住宅并补公园';
+      } else if (taxPressure > 0) {
+        driver = '税率抑制迁入';
+        action = '考虑降税恢复迁入';
+      } else {
+        driver = '迁入意愿上升';
+        action = '继续沿路补住宅';
+      }
+    } else if (top.key === 'commercial') {
+      if (stats.jobs < Math.floor(population * 0.35)) {
+        driver = '就业岗位偏少';
+        action = '在住宅旁规划商业区';
+      } else if (landValue >= 55) {
+        driver = '高地价带动客流';
+        action = '贴近住宅和公园补商业';
+      } else if (roadCoverage < 55) {
+        driver = '道路客流不足';
+        action = '先补道路接入商业区';
+      } else if (congestion > 35) {
+        driver = '拥堵压制客流';
+        action = '升级瓶颈道路';
+      } else {
+        driver = '居民消费增长';
+        action = '在住宅附近补商业区';
+      }
+    } else if (stats.jobs < Math.floor(population * 0.45)) {
+      driver = '就业缺口';
+      action = '远离住宅补工业区';
+    } else if (stats.industrialTiles === 0 && stats.residentialTiles > 0) {
+      driver = '基础产业空白';
+      action = '接路规划第一片工业区';
+    } else if (roadCoverage < 55) {
+      driver = '物流接入不足';
+      action = '先铺道路接工业区';
+    } else if (pollution > 45) {
+      driver = '污染拖累扩张';
+      action = '分散工业并补服务';
+    } else {
+      driver = '订单供应需要材料';
+      action = '规划工业并启动生产';
+    }
+
+    return { residential, commercial, industrial, advice, focus: top.label, driver, action, urgency: top.value };
   }
 
   private getDemandAdvice(residential: number, commercial: number, industrial: number): string {

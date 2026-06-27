@@ -73,6 +73,7 @@ export interface CityMetrics {
   cityLevelName: string; taxLevel: CityTaxLevel; taxRatePercent: number;
   residentialDemand: number; commercialDemand: number; industrialDemand: number;
   demandAdvice: string;
+  demandFocus: string; demandDriver: string; demandAction: string; demandUrgency: number;
   congestion: number; pollution: number; crime: number;
   healthCoverage: number; educationCoverage: number;
   safetyCoverage: number; securityCoverage: number;

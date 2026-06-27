@@ -507,10 +507,10 @@ class WeChatCityGame {
 
     const lines = [
       `等级: Lv${m.cityLevel} ${m.cityLevelName} 税${m.taxRatePercent}%`,
-      `住房容量: ${m.housingCapacity.toLocaleString()}`,
-      `已开发地块: ${m.buildingCount}`,
+      `住房: ${m.housingCapacity.toLocaleString()} 开发: ${m.buildingCount}`,
       `道路覆盖: ${Math.round(m.roadCoverage)}%`,
       `需求: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}`,
+      this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),
       `服务: 园${Math.round(m.parkCoverage)} 医${Math.round(m.healthCoverage)} 学${Math.round(m.educationCoverage)}`,
       `污染/拥堵: ${Math.round(m.pollution)} / ${Math.round(m.congestion)}`,
       this.selectedTile
