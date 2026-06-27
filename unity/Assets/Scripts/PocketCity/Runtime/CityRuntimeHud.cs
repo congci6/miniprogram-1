@@ -8831,13 +8831,19 @@ namespace PocketCity.Runtime
                 return;
             }
 
-            if (!lastCommandFeedbackSucceeded || controller == null || !controller.LastCommandWasCommit)
+            if (controller == null || !controller.LastCommandWasCommit)
+            {
+                return;
+            }
+
+            if (!lastCommandFeedbackSucceeded)
             {
                 return;
             }
 
             if (!AdvisorAdoptionMatchesCommitKind(pendingAdvisorType, controller.LastCommandCommitKind))
             {
+                ClearPendingAdvisorAdoption();
                 return;
             }
 
