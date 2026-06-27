@@ -1,4 +1,4 @@
-import { GridPos, ZoneType, TerrainType, RoadTier } from '@/types/index';
+import { GridPos, ZoneType, TerrainType } from '@/types/index';
 
 export interface Tile {
   pos: GridPos; zone: ZoneType; terrain: TerrainType;
@@ -41,5 +41,14 @@ export class CityGrid {
   setBuilding(x: number, y: number, id: string): void {
     const t = this.getTile(x, y); if (t) t.buildingId = id;
   }
+
+  clearPlanning(x: number, y: number): void {
+    const t = this.getTile(x, y);
+    if (!t) return;
+    t.zone = ZoneType.None;
+    t.roadId = '';
+    t.buildingId = '';
+  }
+
   getTileData(): Tile[][] { return this.tiles; }
 }

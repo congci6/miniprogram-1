@@ -6,6 +6,7 @@ export class IsometricRenderer {
   private scene: Phaser.Scene;
   private sim: CitySimulation;
   private gfx: Phaser.GameObjects.Graphics;
+  private hoverTile: { x: number; y: number } | null = null;
   readonly TILE_W = 64;
   readonly TILE_H = 32;
 
@@ -31,10 +32,16 @@ export class IsometricRenderer {
     return { x: Math.floor(tx), y: Math.floor(ty) };
   }
 
-  handleClick(wx: number, wy: number): void {
+  getTileAtWorld(wx: number, wy: number): { x: number; y: number } | null {
     const iso = this.worldToIso(wx, wy);
-    if (iso && this.sim.grid.inBounds(iso.x, iso.y))
-      console.log(`Click tile (${iso.x}, ${iso.y}) zone=${ZoneType[this.sim.grid.getTile(iso.x, iso.y)!.zone]}`);
+    if (!iso || !this.sim.grid.inBounds(iso.x, iso.y)) return null;
+    return iso;
+  }
+
+  setHoverTile(tile: { x: number; y: number } | null): void {
+    if (this.hoverTile?.x === tile?.x && this.hoverTile?.y === tile?.y) return;
+    this.hoverTile = tile;
+    this.render();
   }
 
   render(): void {
@@ -60,6 +67,19 @@ export class IsometricRenderer {
     // border
     this.gfx.lineStyle(1, 0x333333, 0.25);
     this.gfx.strokeRect(wx - hw, wy - hh, this.TILE_W, this.TILE_H);
+
+    if (tile.roadId) {
+      this.gfx.fillStyle(0x2f3437, 0.9);
+      this.gfx.fillTriangle(wx, wy - hh * 0.38, wx - hw * 0.56, wy, wx, wy + hh * 0.38);
+      this.gfx.fillTriangle(wx, wy - hh * 0.38, wx + hw * 0.56, wy, wx, wy + hh * 0.38);
+      this.gfx.lineStyle(1, 0xf2d479, 0.5);
+      this.gfx.strokeRect(wx - hw * 0.42, wy - hh * 0.24, this.TILE_W * 0.84, this.TILE_H * 0.48);
+    }
+
+    if (this.hoverTile?.x === x && this.hoverTile.y === y) {
+      this.gfx.lineStyle(2, 0xf7f1b5, 0.9);
+      this.gfx.strokeRect(wx - hw, wy - hh, this.TILE_W, this.TILE_H);
+    }
   }
 
   private getColor(zone: ZoneType, terrain: TerrainType): number {

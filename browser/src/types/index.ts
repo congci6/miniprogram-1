@@ -22,6 +22,13 @@ export enum CityTaxLevel { Low, Normal, High }
 export enum ServiceBudgetLevel { Lean, Standard, Boosted }
 export enum RoadTier { Local, Arterial }
 export enum BuildingRotation { None = 0, North, East, South, West }
+export type PlanningTool =
+  | 'inspect'
+  | 'road'
+  | 'residential'
+  | 'commercial'
+  | 'industrial'
+  | 'erase';
 export interface GridPos { x: number; y: number }
 export interface BuildingDefinition {
   id: string; name: string; category: BuildingCategory;
