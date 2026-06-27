@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:wechat": "tsc && vite build --config vite.wechat.config.ts",
     "preview": "vite preview"
   },
   "keywords": [],

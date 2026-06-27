@@ -1024,14 +1024,15 @@ assert(!packageJson.devDependencies, 'Root package.json must not declare Vite/Vi
 
 const gameJson = JSON.parse(readFileSync('miniprogram/game.json', 'utf8'));
 assert(!Object.prototype.hasOwnProperty.call(gameJson, 'workers'), 'miniprogram/game.json must not contain workers.');
-assert(gameJson.deviceOrientation === 'landscape', 'Unity mini game placeholder must stay landscape.');
+assert(gameJson.deviceOrientation === 'landscape', 'WeChat mini game must stay landscape.');
 
 const gameJs = readFileSync('miniprogram/game.js', 'utf8');
 assert(gameJs.trim().length > 0, 'miniprogram/game.js must not be empty.');
+assert(gameJs.includes('NON_UNITY_WECHAT_CANVAS_RUNTIME'), 'miniprogram/game.js must contain the non-Unity WeChat Canvas runtime marker.');
 if (verifyMode === 'scaffold') {
-  assert(gameJs.includes('UNITY_BUILD_PENDING'), 'miniprogram/game.js should be the Unity build placeholder in scaffold mode.');
+  assert(!gameJs.includes('UNITY_BUILD_PENDING'), 'miniprogram/game.js must not be the old Unity placeholder.');
 } else {
-  assert(!gameJs.includes('UNITY_BUILD_PENDING'), 'miniprogram/game.js must be replaced by exported Unity output in exported mode.');
+  assert(!gameJs.includes('UNITY_BUILD_PENDING'), 'miniprogram/game.js must be replaced by playable mini game output in exported mode.');
   assert(!gameJs.includes('Unity build pending'), 'miniprogram/game.js must not contain the placeholder modal in exported mode.');
 }
 
@@ -1987,4 +1988,4 @@ for (const marker of ['Enum.IsDefined(typeof(CityTaxLevel)', 'Enum.IsDefined(typ
   assert(core.includes(marker), `Unity simulation import missing save sanitization marker: ${marker}`);
 }
 
-console.log(`Unity-only ${verifyMode} verification passed.`);
+console.log(`Project verification passed (mode: ${verifyMode}).`);

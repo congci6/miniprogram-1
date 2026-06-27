@@ -1,13 +1,16 @@
-# 口袋城市规划师 Unity 版
+# 口袋城市规划师 微信小游戏版
 
-这是一个 Unity-first 的微信小游戏工程。项目不再维护 TypeScript / Three.js 运行版；旧原型只保留在 `legacy/typescript-prototype/` 作为迁移参考。
+这是一个非 Unity 的微信小游戏工程。当前上线路径使用 TypeScript 共享模拟核心，并为微信小游戏生成 Canvas 2D runtime；`unity/` 只保留为历史迁移参考，不再作为当前架构目标。
 
 ## 当前状态
-- `unity/` 是唯一活跃游戏工程，核心玩法已经迁移到 C#。
-- `miniprogram/` 是 Unity / 团结引擎导出并经微信小游戏转换后的输出目录；当前 `game.js` 只是占位提示。
-- 根目录只保留结构校验脚本，不再安装 Vite、Vitest 或 TS 依赖。
+- `browser/` 是当前活跃开发工程，使用 Phaser + TypeScript + Vite 做浏览器调试版本。
+- `browser/src/wechat/main.ts` 是微信小游戏 Canvas 2D 入口，不依赖 DOM、Phaser 或 Unity。
+- `miniprogram/game.js` 由 `npm run build:wechat` 生成，包含可启动的非 Unity Canvas runtime，不再是 Unity 占位提示。
+- `unity/` 和旧文档中的 Unity 内容只作为历史实现参考；后续功能应优先迁移到 `browser/src` 的共享模拟与微信 runtime。
 
 ## 已有玩法核心
+
+当前非 Unity runtime 已具备：等距城市网格、住宅/商业/工业分区、道路铺设、清理工具、现金消耗、人口增长、道路覆盖、污染、拥堵、幸福度、城市评分、地块检查、微信本地存档和横屏 Canvas HUD。下面的大量系统来自历史 Unity 方案和产品规划，尚未全部迁移到当前微信 Canvas runtime。
 - 网格地图、地形、水面和山地限制。
 - 道路铺设、普通路/主干道升级、道路容量、道路负载、拥堵、断头路、交叉口、路网连通性、`IntersectionDelay` 路口延误和 `RoadBottleneckPressure` 道路瓶颈指标。
 - 38 类住宅、商业、混合用地、办公、工业、服务和基础设施建筑；中后期可解锁高容量公寓楼、研发园区、资源加工园、配送中心、货运铁路站、市政厅、区域医院、`emergency_shelter` 应急避难中心、`memorial_garden` 纪念花园、`police_precinct` 警署、通信枢纽、`post_office` 邮政局、道路养护站、邻里停车楼、雨水花园、太阳能阵列、垃圾发电厂、会展中心和城际枢纽，缓解住房紧张、建立创新能力、补强本地资源适配、建立仓储缓冲、打开铁路货运、建立行政效率与容量、补强医疗覆盖、提高灾备、提供生命关怀、提升警务响应、提升企业效率、补足邮件配送、降低事故风险、治理停车压力并提升雨洪/清洁电力/资源回收/地标客流/外部连接韧性。
@@ -102,15 +105,14 @@
 - 视觉资源工厂：自动生成材质、分区色板、热力图色板、建筑图标图集、研发园区/资源加工园/配送中心/货运铁路/城市广场/会展中心/市政厅/医院/应急避难（`IconShape.Shelter`）/通信/道路养护/停车/轨道交通/城际枢纽/太阳能/垃圾发电图标和加载页背景。
 
 ## 开发入口
-1. 用 Unity 或团结引擎打开 `unity/`。
-2. 在 Unity 菜单运行 `Pocket City/Create Prototype Scene` 生成可交互原型场景；它会自动调用 `Pocket City/Create Visual Assets`。
-3. 打开 `Assets/Scenes/PocketCityPrototype.unity`，进入 Play Mode 验证地图、HUD、图层和工具按钮。
-4. 在 Play Mode 中可使用鼠标/触控拖动地图、滚轮/双指缩放、HUD 按钮暂停/倍速/保存/读取，并切换税率、服务预算、发行债券和城市政策观察数值变化。
-5. 通过 Unity/团结微信小游戏转换 SDK 导出到 `miniprogram/`。
+1. 浏览器调试：`cd browser && npm run dev`。
+2. 浏览器生产构建：`cd browser && npm run build`。
+3. 微信小游戏构建：`npm run build:wechat`，输出到 `miniprogram/game.js`。
+4. 微信开发者工具打开 `miniprogram/`，使用横屏小游戏模式预览与真机调试。
 
 ## 本地校验
 ```bash
-npm.cmd run verify
+npm run verify
 ```
 
-当前环境未检测到可用的 Unity/Unity Hub 命令，因此这里只能做结构与源码静态校验；C# 编译需要在 Unity Editor 中完成。
+`npm run verify` 会保留历史源码静态校验，并额外构建非 Unity 微信小游戏入口，确保 `miniprogram/game.js` 不是 Unity 占位文件。
