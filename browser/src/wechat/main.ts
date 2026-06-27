@@ -62,9 +62,12 @@ const TOOL_LABELS: Record<PlanningTool, string> = {
   residential: '住宅',
   commercial: '商业',
   industrial: '工业',
+  park: '公园',
+  clinic: '诊所',
+  school: '学校',
   erase: '清理',
 };
-const TOOLS: PlanningTool[] = ['inspect', 'road', 'residential', 'commercial', 'industrial', 'erase'];
+const TOOLS: PlanningTool[] = ['inspect', 'road', 'residential', 'commercial', 'industrial', 'park', 'clinic', 'school', 'erase'];
 const ZONE_LABELS: Record<ZoneType, string> = {
   [ZoneType.None]: '未规划',
   [ZoneType.Residential]: '住宅',
@@ -84,6 +87,16 @@ const MATERIAL_LABELS: Record<MaterialId, string> = {
   wood: '木材',
   metal: '金属',
   plastic: '塑料',
+};
+const SERVICE_BUILDING_LABELS: Record<string, string> = {
+  community_park: '社区公园',
+  community_clinic: '社区诊所',
+  community_school: '社区学校',
+};
+const SERVICE_MARKER_COLORS: Record<string, string> = {
+  community_park: '#8fe06f',
+  community_clinic: '#ff7f9f',
+  community_school: '#f2d479',
 };
 
 class WeChatCityGame {
@@ -218,6 +231,7 @@ class WeChatCityGame {
         const pos = this.tileToWorld(x, y);
         this.drawDiamond(pos.x, pos.y, this.colorForTile(tile), '#243b2c', 0.94);
         if (tile.roadId) this.drawRoad(pos.x, pos.y);
+        this.drawServiceMarker(tile, pos.x, pos.y);
       }
     }
 
@@ -258,6 +272,18 @@ class WeChatCityGame {
     this.ctx.stroke();
   }
 
+  private drawServiceMarker(tile: Tile, x: number, y: number): void {
+    const color = SERVICE_MARKER_COLORS[tile.buildingId];
+    if (!color) return;
+    this.ctx.beginPath();
+    this.ctx.arc(x, y - 7, 6, 0, Math.PI * 2);
+    this.ctx.fillStyle = color;
+    this.ctx.fill();
+    this.ctx.strokeStyle = 'rgba(255,255,255,0.72)';
+    this.ctx.lineWidth = 2;
+    this.ctx.stroke();
+  }
+
   private drawTopBar(): void {
     const m = this.sim.metrics;
     this.ctx.fillStyle = 'rgba(18,24,28,0.9)';
@@ -275,10 +301,10 @@ class WeChatCityGame {
   private drawSidePanel(): void {
     const m = this.sim.metrics;
     const x = 12;
-    const y = this.height - 168;
+    const y = this.height - 204;
     const width = 238;
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
-    this.roundRect(x, y, width, 150, 6);
+    this.roundRect(x, y, width, 186, 6);
     this.ctx.fill();
 
     const lines = [
@@ -286,6 +312,7 @@ class WeChatCityGame {
       `住房容量: ${m.housingCapacity.toLocaleString()}`,
       `已开发地块: ${m.buildingCount}`,
       `道路覆盖: ${Math.round(m.roadCoverage)}%`,
+      `服务: 园${Math.round(m.parkCoverage)} 医${Math.round(m.healthCoverage)} 学${Math.round(m.educationCoverage)}`,
       `污染/拥堵: ${Math.round(m.pollution)} / ${Math.round(m.congestion)}`,
       this.selectedTile
         ? `地块: (${this.selectedTile.pos.x}, ${this.selectedTile.pos.y}) ${ZONE_LABELS[this.selectedTile.zone]}`
@@ -293,6 +320,9 @@ class WeChatCityGame {
       this.selectedTile
         ? `地形: ${TERRAIN_LABELS[this.selectedTile.terrain]} 道路: ${this.selectedTile.roadId ? '已连接' : '无'}`
         : '点击地图查看详情',
+      this.selectedTile?.buildingId
+        ? `建筑: ${SERVICE_BUILDING_LABELS[this.selectedTile.buildingId] ?? this.selectedTile.buildingId}`
+        : `服务缺口: ${Math.round(m.serviceGapPressure)}`,
       this.selectedTile?.zone === ZoneType.Residential
         ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile)}`
         : `订单交付: ${this.sim.completedOrders}`,

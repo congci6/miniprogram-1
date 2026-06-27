@@ -10,6 +10,7 @@ import {
   MaterialId,
   PlanningTool,
   ProductionJob,
+  ServiceBuildingId,
   TerrainType,
   ZoneType,
 } from '@/types/index';
@@ -23,6 +24,10 @@ interface GridStats {
   industrialTiles: number;
   residentialTiles: number;
   upgradedResidentialTiles: number;
+  serviceBuildings: number;
+  parkCoveredResidentialTiles: number;
+  healthCoveredResidentialTiles: number;
+  educationCoveredResidentialTiles: number;
 }
 
 export interface PlanningActionResult {
@@ -81,6 +86,56 @@ const MATERIAL_LABELS: Record<MaterialId, string> = {
   wood: '木材',
   metal: '金属',
   plastic: '塑料',
+};
+
+const SERVICE_LABELS: Record<ServiceBuildingId, string> = {
+  community_park: '社区公园',
+  community_clinic: '社区诊所',
+  community_school: '社区学校',
+};
+
+interface ServiceBuildingDefinition {
+  label: string;
+  cashCost: number;
+  radius: number;
+  jobs: number;
+  pollution: number;
+  parkValue: number;
+  healthValue: number;
+  educationValue: number;
+}
+
+const SERVICE_BUILDINGS: Record<ServiceBuildingId, ServiceBuildingDefinition> = {
+  community_park: {
+    label: '社区公园',
+    cashCost: 420,
+    radius: 3,
+    jobs: 2,
+    pollution: -1,
+    parkValue: 1,
+    healthValue: 0,
+    educationValue: 0,
+  },
+  community_clinic: {
+    label: '社区诊所',
+    cashCost: 620,
+    radius: 4,
+    jobs: 10,
+    pollution: 0,
+    parkValue: 0,
+    healthValue: 1,
+    educationValue: 0,
+  },
+  community_school: {
+    label: '社区学校',
+    cashCost: 680,
+    radius: 4,
+    jobs: 12,
+    pollution: 1,
+    parkValue: 0,
+    healthValue: 0,
+    educationValue: 1,
+  },
 };
 
 const PRODUCTION_RECIPES: Record<MaterialId, { label: string; days: number; cashCost: number }> = {
@@ -150,6 +205,22 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
     description: '把任意住宅升级到 2 级，提升住房容量',
     rewardCash: 640,
     isMet: (_simulation, stats) => stats.upgradedResidentialTiles >= 1,
+  },
+  {
+    id: 'first-service',
+    title: '建设第一座公共服务',
+    description: '建成公园、诊所或学校中的任意一座',
+    rewardCash: 520,
+    isMet: (_simulation, stats) => stats.serviceBuildings >= 1,
+  },
+  {
+    id: 'balanced-services',
+    title: '完善基础服务覆盖',
+    description: '让公园、医疗、教育覆盖率都达到 50%',
+    rewardCash: 960,
+    isMet: (simulation) => simulation.metrics.parkCoverage >= 50
+      && simulation.metrics.healthCoverage >= 50
+      && simulation.metrics.educationCoverage >= 50,
   },
 ];
 
@@ -235,6 +306,9 @@ export class CitySimulation {
       this.computeMetrics();
       return { changed: true, message: this.appendObjectiveRewards(`清理地块 -$${ERASE_COST}`) };
     }
+
+    const serviceBuildingId = this.serviceBuildingFromTool(tool);
+    if (serviceBuildingId) return this.placeServiceBuilding(x, y, serviceBuildingId);
 
     const zone = this.zoneFromTool(tool);
     const stats = ZONE_STATS[zone];
@@ -323,6 +397,10 @@ export class CitySimulation {
     if (tile.zone !== ZoneType.Residential) return 0;
     const match = /^residential_l([2-3])$/.exec(tile.buildingId);
     return match ? Number(match[1]) : 1;
+  }
+
+  getServiceBuildingLabel(buildingId: string): string {
+    return SERVICE_LABELS[buildingId as ServiceBuildingId] ?? '';
   }
 
   getObjectives(): CityObjective[] {
@@ -436,6 +514,22 @@ export class CitySimulation {
     }
   }
 
+  private placeServiceBuilding(x: number, y: number, serviceBuildingId: ServiceBuildingId): PlanningActionResult {
+    const tile = this.grid.getTile(x, y);
+    if (!tile) return { changed: false, message: '地块不在地图内' };
+    const service = SERVICE_BUILDINGS[serviceBuildingId];
+    if (tile.terrain === TerrainType.Water) return { changed: false, message: '水域暂时不能建设服务设施' };
+    if (tile.roadId) return { changed: false, message: '道路地块不能建设服务设施' };
+    if (tile.zone !== ZoneType.None || tile.buildingId) return { changed: false, message: '请在空地建设服务设施' };
+    if (!this.hasAdjacentRoad(x, y)) return { changed: false, message: `${service.label}需要临近道路` };
+    if (!this.trySpend(service.cashCost)) return { changed: false, message: `现金不足，无法建设${service.label}` };
+
+    this.grid.setZone(x, y, ZoneType.Civic);
+    this.grid.setBuilding(x, y, serviceBuildingId);
+    this.computeMetrics();
+    return { changed: true, message: this.appendObjectiveRewards(`建设${service.label} -$${service.cashCost}`) };
+  }
+
   private applyOfflineProgress(savedAtMs: number, nowMs: number): CityOfflineProgressResult {
     const elapsedMs = Math.max(0, nowMs - savedAtMs);
     const rawDays = Math.floor(elapsedMs / OFFLINE_MS_PER_DAY);
@@ -495,25 +589,43 @@ export class CitySimulation {
     }
   }
 
+  private serviceBuildingFromTool(tool: PlanningTool): ServiceBuildingId | null {
+    switch (tool) {
+      case 'park': return 'community_park';
+      case 'clinic': return 'community_clinic';
+      case 'school': return 'community_school';
+      default: return null;
+    }
+  }
+
   private computeMetrics(): void {
     const stats = this.calculateGridStats();
     const roadCoverage = stats.zonedTiles === 0 ? 0 : Math.min(100, (stats.roads / stats.zonedTiles) * 120);
     const congestion = stats.zonedTiles === 0 ? 0 : Math.max(0, Math.min(100, stats.zonedTiles * 4 - stats.roads * 9));
-    const pollution = Math.min(100, stats.pollution);
+    const pollution = Math.max(0, Math.min(100, stats.pollution));
+    const parkCoverage = stats.residentialTiles === 0 ? 0 : Math.min(100, (stats.parkCoveredResidentialTiles / stats.residentialTiles) * 100);
+    const healthCoverage = stats.residentialTiles === 0 ? 0 : Math.min(100, (stats.healthCoveredResidentialTiles / stats.residentialTiles) * 100);
+    const educationCoverage = stats.residentialTiles === 0 ? 0 : Math.min(100, (stats.educationCoveredResidentialTiles / stats.residentialTiles) * 100);
+    const serviceCoverage = (parkCoverage + healthCoverage + educationCoverage) / 3;
+    const serviceGapPressure = stats.residentialTiles === 0 ? 0 : Math.max(0, 100 - serviceCoverage);
     const rentPressure = stats.housingCapacity === 0
       ? 0
       : Math.max(0, Math.min(100, (this.metrics.population / stats.housingCapacity) * 100 - 75));
 
     this.metrics.housingCapacity = stats.housingCapacity;
-    this.metrics.buildingCount = stats.zonedTiles + stats.roads;
+    this.metrics.buildingCount = stats.zonedTiles + stats.roads + stats.serviceBuildings;
     this.metrics.roadCoverage = roadCoverage;
     this.metrics.congestion = congestion;
     this.metrics.pollution = pollution;
+    this.metrics.parkCoverage = parkCoverage;
+    this.metrics.healthCoverage = healthCoverage;
+    this.metrics.educationCoverage = educationCoverage;
+    this.metrics.serviceGapPressure = serviceGapPressure;
     this.metrics.rentPressure = rentPressure;
     this.metrics.taxRatePercent = this.getTaxRatePercent();
-    this.metrics.landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.25 - pollution * 0.2 - congestion * 0.15));
-    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 55 + roadCoverage * 0.2 - pollution * 0.25 - rentPressure * 0.2)));
-    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 45 + this.metrics.happiness * 0.35 + roadCoverage * 0.2 - pollution * 0.2)));
+    this.metrics.landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
+    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 - pollution * 0.22 - rentPressure * 0.2)));
+    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 - pollution * 0.2)));
     this.metrics.cityLevelName = this.metrics.population >= 2500 ? '繁荣城区'
       : this.metrics.population >= 800 ? '成长街区'
         : '新生街区';
@@ -530,12 +642,25 @@ export class CitySimulation {
       industrialTiles: 0,
       residentialTiles: 0,
       upgradedResidentialTiles: 0,
+      serviceBuildings: 0,
+      parkCoveredResidentialTiles: 0,
+      healthCoveredResidentialTiles: 0,
+      educationCoveredResidentialTiles: 0,
     };
+    const residentialTiles: Array<{ x: number; y: number }> = [];
+    const serviceSources: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }> = [];
     for (let y = 0; y < this.grid.height; y++) {
       for (let x = 0; x < this.grid.width; x++) {
         const tile = this.grid.getTile(x, y);
         if (!tile) continue;
         if (tile.roadId) stats.roads++;
+        const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
+        if (service) {
+          stats.serviceBuildings++;
+          stats.jobs += service.jobs;
+          stats.pollution += service.pollution;
+          serviceSources.push({ x, y, definition: service });
+        }
         const zoneStats = ZONE_STATS[tile.zone];
         if (zoneStats) {
           stats.zonedTiles++;
@@ -547,10 +672,16 @@ export class CitySimulation {
           if (tile.zone === ZoneType.Industrial) stats.industrialTiles++;
           if (tile.zone === ZoneType.Residential) {
             stats.residentialTiles++;
+            residentialTiles.push({ x, y });
             if (this.getResidentialLevel(tile) > 1) stats.upgradedResidentialTiles++;
           }
         }
       }
+    }
+    for (const residential of residentialTiles) {
+      if (this.isResidentialCoveredBy(residential, serviceSources, 'parkValue')) stats.parkCoveredResidentialTiles++;
+      if (this.isResidentialCoveredBy(residential, serviceSources, 'healthValue')) stats.healthCoveredResidentialTiles++;
+      if (this.isResidentialCoveredBy(residential, serviceSources, 'educationValue')) stats.educationCoveredResidentialTiles++;
     }
     return stats;
   }
@@ -563,7 +694,19 @@ export class CitySimulation {
     if (this.metrics.pollution > 55) alerts.push('污染压力上升');
     if (this.metrics.cash < 5000) alerts.push('现金储备偏低');
     if (this.getStorageUsed() >= STORAGE_CAPACITY) alerts.push('仓库容量已满');
+    if (stats.residentialTiles >= 2 && this.metrics.serviceGapPressure > 60) alerts.push('公共服务覆盖不足');
     return alerts;
+  }
+
+  private isResidentialCoveredBy(
+    residential: { x: number; y: number },
+    services: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }>,
+    field: 'parkValue' | 'healthValue' | 'educationValue',
+  ): boolean {
+    return services.some((service) => {
+      if (service.definition[field] <= 0) return false;
+      return Math.abs(residential.x - service.x) + Math.abs(residential.y - service.y) <= service.definition.radius;
+    });
   }
 
   private processPopulation(): void {

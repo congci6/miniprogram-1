@@ -17,6 +17,9 @@ const TOOL_LABELS: Record<PlanningTool, string> = {
   residential: '住宅',
   commercial: '商业',
   industrial: '工业',
+  park: '公园',
+  clinic: '诊所',
+  school: '学校',
   erase: '清理',
 };
 
@@ -24,6 +27,12 @@ const MATERIAL_LABELS: Record<MaterialId, string> = {
   wood: '木材',
   metal: '金属',
   plastic: '塑料',
+};
+
+const SERVICE_BUILDING_LABELS: Record<string, string> = {
+  community_park: '社区公园',
+  community_clinic: '社区诊所',
+  community_school: '社区学校',
 };
 
 const ZONE_LABELS: Record<ZoneType, string> = {
@@ -169,6 +178,9 @@ export class HUD {
       ? '<br>地块: (' + this.selectedTile.pos.x + ', ' + this.selectedTile.pos.y + ')' +
         '<br>地形: ' + TERRAIN_LABELS[this.selectedTile.terrain] +
         '<br>分区: ' + ZONE_LABELS[this.selectedTile.zone] +
+        (this.selectedTile.buildingId
+          ? '<br>建筑: ' + (SERVICE_BUILDING_LABELS[this.selectedTile.buildingId] ?? this.selectedTile.buildingId)
+          : '') +
         '<br>道路: ' + (this.selectedTile.roadId ? '已连接' : '无') +
         (this.selectedTile.zone === ZoneType.Residential
           ? '<br>住宅等级: ' + this.residentialLevelLabel(this.selectedTile)
@@ -185,6 +197,7 @@ export class HUD {
       '住房容量: ' + metrics.housingCapacity.toLocaleString() + '<br>' +
       '已开发地块: ' + metrics.buildingCount + '<br>' +
       '道路覆盖: ' + Math.round(metrics.roadCoverage) + '%<br>' +
+      '服务覆盖: 园' + Math.round(metrics.parkCoverage) + '% / 医' + Math.round(metrics.healthCoverage) + '% / 学' + Math.round(metrics.educationCoverage) + '%<br>' +
       '污染: ' + Math.round(metrics.pollution) + ' / 拥堵: ' + Math.round(metrics.congestion) +
       tileText +
       (metrics.alerts.length ? '<br>提醒: ' + metrics.alerts.join('、') : '');

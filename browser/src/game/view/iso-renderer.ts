@@ -1,6 +1,12 @@
 import * as Phaser from 'phaser';
 import { CitySimulation } from '@/simulation/city-simulation';
-import { ZoneType, TerrainType } from '@/types/index';
+import { ServiceBuildingId, ZoneType, TerrainType } from '@/types/index';
+
+const SERVICE_MARKER_COLORS: Record<ServiceBuildingId, number> = {
+  community_park: 0x8fe06f,
+  community_clinic: 0xff7f9f,
+  community_school: 0xf2d479,
+};
 
 export class IsometricRenderer {
   private scene: Phaser.Scene;
@@ -76,10 +82,21 @@ export class IsometricRenderer {
       this.gfx.strokeRect(wx - hw * 0.42, wy - hh * 0.24, this.TILE_W * 0.84, this.TILE_H * 0.48);
     }
 
+    this.drawServiceMarker(tile.buildingId, wx, wy);
+
     if (this.hoverTile?.x === x && this.hoverTile.y === y) {
       this.gfx.lineStyle(2, 0xf7f1b5, 0.9);
       this.gfx.strokeRect(wx - hw, wy - hh, this.TILE_W, this.TILE_H);
     }
+  }
+
+  private drawServiceMarker(buildingId: string, wx: number, wy: number): void {
+    const color = SERVICE_MARKER_COLORS[buildingId as ServiceBuildingId];
+    if (!color) return;
+    this.gfx.fillStyle(color, 0.95);
+    this.gfx.fillCircle(wx, wy - 8, 7);
+    this.gfx.lineStyle(2, 0xffffff, 0.7);
+    this.gfx.strokeCircle(wx, wy - 8, 7);
   }
 
   private getColor(zone: ZoneType, terrain: TerrainType): number {

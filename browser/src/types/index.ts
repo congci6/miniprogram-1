@@ -28,7 +28,11 @@ export type PlanningTool =
   | 'residential'
   | 'commercial'
   | 'industrial'
+  | 'park'
+  | 'clinic'
+  | 'school'
   | 'erase';
+export type ServiceBuildingId = 'community_park' | 'community_clinic' | 'community_school';
 export type MaterialId = 'wood' | 'metal' | 'plastic';
 export type CityMaterialInventory = Record<MaterialId, number>;
 export type MaterialCost = Partial<Record<MaterialId, number>>;
