@@ -391,10 +391,10 @@ class WeChatCityGame {
   private drawSidePanel(): void {
     const m = this.sim.metrics;
     const x = 12;
-    const y = this.height - 204;
+    const y = this.height - 220;
     const width = 238;
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
-    this.roundRect(x, y, width, 186, 6);
+    this.roundRect(x, y, width, 202, 6);
     this.ctx.fill();
 
     const lines = [
@@ -402,6 +402,7 @@ class WeChatCityGame {
       `住房容量: ${m.housingCapacity.toLocaleString()}`,
       `已开发地块: ${m.buildingCount}`,
       `道路覆盖: ${Math.round(m.roadCoverage)}%`,
+      `需求: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}`,
       `服务: 园${Math.round(m.parkCoverage)} 医${Math.round(m.healthCoverage)} 学${Math.round(m.educationCoverage)}`,
       `污染/拥堵: ${Math.round(m.pollution)} / ${Math.round(m.congestion)}`,
       this.selectedTile

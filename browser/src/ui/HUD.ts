@@ -223,6 +223,7 @@ export class HUD {
       '已开发地块: ' + metrics.buildingCount + '<br>' +
       '道路覆盖: ' + Math.round(metrics.roadCoverage) + '%<br>' +
       '税率: ' + metrics.taxRatePercent + '%<br>' +
+      '需求: 住' + metrics.residentialDemand + ' / 商' + metrics.commercialDemand + ' / 工' + metrics.industrialDemand + '<br>' +
       '服务覆盖: 园' + Math.round(metrics.parkCoverage) + '% / 医' + Math.round(metrics.healthCoverage) + '% / 学' + Math.round(metrics.educationCoverage) + '%<br>' +
       '污染: ' + Math.round(metrics.pollution) + ' / 拥堵: ' + Math.round(metrics.congestion) +
       tileText +
@@ -251,6 +252,10 @@ export class HUD {
       this.taxButtonHtml(CityTaxLevel.Normal, currentTaxLevel) +
       this.taxButtonHtml(CityTaxLevel.High, currentTaxLevel) +
       '</div>' +
+      '<strong>分区需求</strong> 住' + (this.metrics?.residentialDemand ?? 0) +
+      ' / 商' + (this.metrics?.commercialDemand ?? 0) +
+      ' / 工' + (this.metrics?.industrialDemand ?? 0) + '<br>' +
+      '<span style="color:#d8e6ba">' + (this.metrics?.demandAdvice ?? '') + '</span><br><br>' +
       '<strong>仓库</strong> ' + this.storageUsed + '/' + this.storageCapacity + '<br>' +
       inventoryText + '<br><br>' +
       '<strong>工厂</strong> ' + this.productionQueue.length + '/' + this.productionSlots + '<br>' +

@@ -318,6 +318,8 @@ export class CitySimulation {
       cityScore: 50, cityLevel: 1, cityExperience: 0,
       nextLevelExperience: CITY_LEVEL_EXPERIENCE[1], cityLevelName: CITY_LEVEL_NAMES[0],
       taxLevel: CityTaxLevel.Normal, taxRatePercent: 9, congestion: 0, pollution: 0, crime: 0,
+      residentialDemand: 0, commercialDemand: 0, industrialDemand: 0,
+      demandAdvice: '沿道路规划住宅，打开第一批迁入需求。',
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
@@ -860,6 +862,10 @@ export class CitySimulation {
     const rentPressure = stats.housingCapacity === 0
       ? 0
       : Math.max(0, Math.min(100, (this.metrics.population / stats.housingCapacity) * 100 - 75));
+    const taxRatePercent = this.getTaxRatePercent();
+    const taxPressure = taxRatePercent - 9;
+    const landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
+    const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure);
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.zonedTiles + stats.roads + stats.serviceBuildings;
@@ -872,12 +878,54 @@ export class CitySimulation {
     this.metrics.serviceGapPressure = serviceGapPressure;
     this.metrics.rentPressure = rentPressure;
     this.metrics.taxLevel = this.taxLevel;
-    this.metrics.taxRatePercent = this.getTaxRatePercent();
-    this.metrics.landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
-    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 - pollution * 0.22 - rentPressure * 0.2)));
+    this.metrics.taxRatePercent = taxRatePercent;
+    this.metrics.landValue = landValue;
+    this.metrics.residentialDemand = demand.residential;
+    this.metrics.commercialDemand = demand.commercial;
+    this.metrics.industrialDemand = demand.industrial;
+    this.metrics.demandAdvice = demand.advice;
+    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 - pollution * 0.22 - rentPressure * 0.2 - taxPressure * 2)));
     this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 - pollution * 0.2)));
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
+  }
+
+  private calculateDemand(
+    stats: GridStats,
+    roadCoverage: number,
+    serviceCoverage: number,
+    landValue: number,
+    pollution: number,
+    congestion: number,
+    taxPressure: number,
+  ): { residential: number; commercial: number; industrial: number; advice: string } {
+    const population = this.metrics.population;
+    const targetHousing = Math.max(72, Math.ceil(population * 1.15 + stats.jobs * 0.55 + 48));
+    const housingGap = targetHousing - stats.housingCapacity;
+    const jobGap = population * 0.45 - stats.jobs;
+
+    const residential = this.clampPercent(48 + housingGap * 0.35 + serviceCoverage * 0.08 + roadCoverage * 0.08 - pollution * 0.18 - congestion * 0.12 - taxPressure * 4);
+    const commercial = this.clampPercent(35 + population * 0.18 + landValue * 0.15 + roadCoverage * 0.1 - stats.jobs * 0.12 - congestion * 0.12 - taxPressure * 3);
+    const industrial = this.clampPercent(42 + Math.max(0, jobGap) * 0.8 + stats.residentialTiles * 5 - stats.industrialTiles * 14 + roadCoverage * 0.08 - pollution * 0.2 - taxPressure * 2);
+
+    return { residential, commercial, industrial, advice: this.getDemandAdvice(residential, commercial, industrial) };
+  }
+
+  private getDemandAdvice(residential: number, commercial: number, industrial: number): string {
+    const top = [
+      { key: 'residential', value: residential },
+      { key: 'commercial', value: commercial },
+      { key: 'industrial', value: industrial },
+    ].sort((a, b) => b.value - a.value)[0];
+
+    if (top.value < 45) return '供需暂时稳定，优先补道路、服务和订单材料。';
+    if (top.key === 'residential') return '住宅需求最高，沿道路补住宅区并保持服务覆盖。';
+    if (top.key === 'commercial') return '商业需求最高，在住宅附近补商业区。';
+    return '工业需求最高，远离住宅补工业区并保留道路容量。';
+  }
+
+  private clampPercent(value: number): number {
+    return Math.round(Math.max(0, Math.min(100, value)));
   }
 
   private calculateGridStats(): GridStats {
@@ -950,6 +998,12 @@ export class CitySimulation {
     if (this.metrics.cash < 5000) alerts.push('现金储备偏低');
     if (this.getStorageUsed() >= STORAGE_CAPACITY) alerts.push('仓库容量已满');
     if (stats.residentialTiles >= 2 && this.metrics.serviceGapPressure > 60) alerts.push('公共服务覆盖不足');
+    const topDemand = [
+      { label: '住宅', value: this.metrics.residentialDemand },
+      { label: '商业', value: this.metrics.commercialDemand },
+      { label: '工业', value: this.metrics.industrialDemand },
+    ].sort((a, b) => b.value - a.value)[0];
+    if (topDemand.value >= 75) alerts.push(`${topDemand.label}需求旺盛`);
     return alerts;
   }
 

@@ -71,6 +71,8 @@ export interface CityMetrics {
   happiness: number; cityScore: number;
   cityLevel: number; cityExperience: number; nextLevelExperience: number;
   cityLevelName: string; taxLevel: CityTaxLevel; taxRatePercent: number;
+  residentialDemand: number; commercialDemand: number; industrialDemand: number;
+  demandAdvice: string;
   congestion: number; pollution: number; crime: number;
   healthCoverage: number; educationCoverage: number;
   safetyCoverage: number; securityCoverage: number;
