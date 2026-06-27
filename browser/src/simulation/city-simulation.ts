@@ -70,6 +70,13 @@ interface BudgetBreakdownAdvisor {
   action: string;
 }
 
+interface DistrictPriorityAdvisor {
+  score: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 interface ServiceGapAdvisor {
   score: number;
   focus: string;
@@ -384,6 +391,10 @@ export class CitySimulation {
       budgetFocus: '稳定',
       budgetDriver: '月度现金流稳定',
       budgetAction: '保留现金缓冲',
+      districtPriorityScore: 0,
+      districtPriorityFocus: '起步',
+      districtPriorityDriver: '等待首个片区成形',
+      districtPriorityAction: '先接路规划住宅',
       serviceGapAdvisorScore: 0,
       serviceGapAdvisorFocus: '均衡',
       serviceGapAdvisorDriver: '暂无住宅服务压力',
@@ -1063,6 +1074,7 @@ export class CitySimulation {
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
     const forecast = this.createRiskForecast(stats, budget.net);
     const budgetAdvisor = this.createBudgetBreakdownAdvisor(budget);
+    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
@@ -1071,6 +1083,10 @@ export class CitySimulation {
     this.metrics.budgetFocus = budgetAdvisor.focus;
     this.metrics.budgetDriver = budgetAdvisor.driver;
     this.metrics.budgetAction = budgetAdvisor.action;
+    this.metrics.districtPriorityScore = districtAdvisor.score;
+    this.metrics.districtPriorityFocus = districtAdvisor.focus;
+    this.metrics.districtPriorityDriver = districtAdvisor.driver;
+    this.metrics.districtPriorityAction = districtAdvisor.action;
     this.metrics.serviceGapAdvisorScore = serviceAdvisor.score;
     this.metrics.serviceGapAdvisorFocus = serviceAdvisor.focus;
     this.metrics.serviceGapAdvisorDriver = serviceAdvisor.driver;
@@ -1338,6 +1354,82 @@ export class CitySimulation {
         ? `${topExpense.focus}支出$${topExpense.amount}，月净现金$${budget.net}`
         : `${topExpense.focus}是最大支出$${topExpense.amount}`,
       action: topExpense.action,
+    };
+  }
+
+  private createDistrictPriorityAdvisor(
+    stats: GridStats,
+    demand: DemandAnalysis,
+    budgetAdvisor: BudgetBreakdownAdvisor,
+    serviceAdvisor: ServiceGapAdvisor,
+    roadAdvisor: RoadHierarchyAdvisor,
+  ): DistrictPriorityAdvisor {
+    const housingPressure = stats.housingCapacity === 0
+      ? stats.roads > 0 || stats.zonedTiles > 0 ? 72 : 36
+      : Math.max(this.metrics.rentPressure, demand.residential >= 75 ? demand.residential : 0);
+    const storagePressure = this.getStorageUsed() >= STORAGE_CAPACITY ? 70 : 0;
+    const demandPressure = demand.urgency >= 75 ? demand.urgency : 0;
+    const environmentPressure = this.metrics.pollution >= 45 ? this.metrics.pollution : 0;
+
+    const candidates = [
+      {
+        score: budgetAdvisor.stress,
+        focus: '财政',
+        driver: budgetAdvisor.driver,
+        action: budgetAdvisor.action,
+      },
+      {
+        score: roadAdvisor.pressure,
+        focus: '交通',
+        driver: roadAdvisor.driver,
+        action: roadAdvisor.action,
+      },
+      {
+        score: stats.residentialTiles >= 2 ? serviceAdvisor.score : 0,
+        focus: '服务',
+        driver: serviceAdvisor.driver,
+        action: serviceAdvisor.action,
+      },
+      {
+        score: Math.round(housingPressure),
+        focus: '住房',
+        driver: stats.housingCapacity === 0 ? '尚无可入住住宅容量' : `居住压力${Math.round(this.metrics.rentPressure)}`,
+        action: demand.focus === '住宅' ? demand.action : '补住宅容量并保持服务覆盖',
+      },
+      {
+        score: Math.round(environmentPressure),
+        focus: '环境',
+        driver: `污染${Math.round(this.metrics.pollution)}`,
+        action: '分散工业并补公园',
+      },
+      {
+        score: Math.round(demandPressure),
+        focus: demand.focus,
+        driver: `${demand.focus}需求${demand.urgency}`,
+        action: demand.action,
+      },
+      {
+        score: storagePressure,
+        focus: '供应',
+        driver: '仓库容量已满',
+        action: '交付订单或升级住宅',
+      },
+    ].sort((a, b) => b.score - a.score)[0];
+
+    if (candidates.score < 35) {
+      return {
+        score: Math.round(candidates.score),
+        focus: '均衡',
+        driver: '暂无高优先级片区压力',
+        action: '按当前目标稳步扩建',
+      };
+    }
+
+    return {
+      score: Math.round(Math.min(100, candidates.score)),
+      focus: candidates.focus,
+      driver: candidates.driver,
+      action: candidates.action,
     };
   }
 
