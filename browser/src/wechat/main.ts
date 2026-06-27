@@ -58,6 +58,8 @@ const TILE_W = 48;
 const TILE_H = 24;
 const GRID_W = 24;
 const GRID_H = 18;
+const MIN_VIEWPORT_SCALE = 0.65;
+const MAX_VIEWPORT_SCALE = 1.65;
 const TOOL_LABELS: Record<PlanningTool, string> = {
   inspect: '查看',
   road: '道路',
@@ -136,6 +138,10 @@ class WeChatCityGame {
   private height: number;
   private originX: number;
   private originY: number;
+  private viewportScale = 1;
+  private touchMode: 'none' | 'paint' | 'pan' | 'pinch' = 'none';
+  private panStart: { touchX: number; touchY: number; originX: number; originY: number; moved: boolean } | null = null;
+  private pinchStart: { distance: number; scale: number; originX: number; originY: number; centerX: number; centerY: number } | null = null;
 
   constructor(private readonly runtime: WeChatRuntime) {
     const info = runtime.getSystemInfoSync();
@@ -159,10 +165,7 @@ class WeChatCityGame {
   private bindInput(): void {
     this.runtime.onTouchStart((event) => this.handleTouch(event, true));
     this.runtime.onTouchMove((event) => this.handleTouch(event, false));
-    this.runtime.onTouchEnd(() => {
-      this.lastPaintKey = '';
-      this.save();
-    });
+    this.runtime.onTouchEnd((event) => this.handleTouchEnd(event));
     this.runtime.onHide?.(() => this.save());
     this.runtime.onShow?.(() => {
       if (!this.restore()) this.statusText = '城市已恢复，继续规划';
@@ -187,6 +190,11 @@ class WeChatCityGame {
   }
 
   private handleTouch(event: WeChatTouchEvent, allowToolSwitch: boolean): void {
+    if ((event.touches?.length ?? 0) >= 2) {
+      this.handlePinch(event.touches!);
+      return;
+    }
+
     const touch = event.touches?.[0] ?? event.changedTouches?.[0];
     if (!touch) return;
     const x = touch.clientX;
@@ -217,8 +225,37 @@ class WeChatCityGame {
         this.handleAction(actionButton);
         return;
       }
+
+      if (this.selectedTool === 'inspect') {
+        this.startPan(x, y);
+        return;
+      }
     }
 
+    if (this.touchMode === 'pan') {
+      this.updatePan(x, y);
+      return;
+    }
+
+    if (this.touchMode === 'pinch') return;
+
+    this.touchMode = 'paint';
+    this.applyToolAtScreen(x, y);
+  }
+
+  private handleTouchEnd(event: WeChatTouchEvent): void {
+    const touch = event.changedTouches?.[0] ?? event.touches?.[0];
+    if (this.touchMode === 'pan' && this.panStart && !this.panStart.moved && touch) {
+      this.applyToolAtScreen(touch.clientX, touch.clientY);
+    }
+    this.touchMode = 'none';
+    this.panStart = null;
+    this.pinchStart = null;
+    this.lastPaintKey = '';
+    this.save();
+  }
+
+  private applyToolAtScreen(x: number, y: number): void {
     const tilePos = this.worldToTile(x, y);
     if (!tilePos || !this.sim.grid.inBounds(tilePos.x, tilePos.y)) return;
 
@@ -233,6 +270,44 @@ class WeChatCityGame {
       this.vibrate('light');
       this.save();
     }
+  }
+
+  private startPan(x: number, y: number): void {
+    this.touchMode = 'pan';
+    this.panStart = { touchX: x, touchY: y, originX: this.originX, originY: this.originY, moved: false };
+  }
+
+  private updatePan(x: number, y: number): void {
+    if (!this.panStart) return;
+    const dx = x - this.panStart.touchX;
+    const dy = y - this.panStart.touchY;
+    if (Math.abs(dx) + Math.abs(dy) > 8) this.panStart.moved = true;
+    this.originX = this.panStart.originX + dx;
+    this.originY = this.panStart.originY + dy;
+  }
+
+  private handlePinch(touches: Array<{ clientX: number; clientY: number }>): void {
+    const first = touches[0];
+    const second = touches[1];
+    const centerX = (first.clientX + second.clientX) / 2;
+    const centerY = (first.clientY + second.clientY) / 2;
+    const distance = Math.hypot(first.clientX - second.clientX, first.clientY - second.clientY);
+    if (this.touchMode !== 'pinch' || !this.pinchStart) {
+      this.touchMode = 'pinch';
+      this.pinchStart = { distance, scale: this.viewportScale, originX: this.originX, originY: this.originY, centerX, centerY };
+      return;
+    }
+
+    const nextScale = this.clampViewportScale(this.pinchStart.scale * (distance / Math.max(1, this.pinchStart.distance)));
+    const mapX = (this.pinchStart.centerX - this.pinchStart.originX) / this.pinchStart.scale;
+    const mapY = (this.pinchStart.centerY - this.pinchStart.originY) / this.pinchStart.scale;
+    this.viewportScale = nextScale;
+    this.originX = centerX - mapX * nextScale;
+    this.originY = centerY - mapY * nextScale;
+  }
+
+  private clampViewportScale(value: number): number {
+    return Math.max(MIN_VIEWPORT_SCALE, Math.min(MAX_VIEWPORT_SCALE, value));
   }
 
   private draw(): void {
@@ -256,6 +331,9 @@ class WeChatCityGame {
   }
 
   private drawGrid(): void {
+    this.ctx.save();
+    this.ctx.translate(this.originX, this.originY);
+    this.ctx.scale(this.viewportScale, this.viewportScale);
     for (let y = 0; y < this.sim.grid.height; y++) {
       for (let x = 0; x < this.sim.grid.width; x++) {
         const tile = this.sim.grid.getTile(x, y);
@@ -272,6 +350,7 @@ class WeChatCityGame {
       const pos = this.tileToWorld(this.selectedTile.pos.x, this.selectedTile.pos.y);
       this.drawDiamond(pos.x, pos.y, 'rgba(247,241,181,0.14)', '#f7f1b5', 1);
     }
+    this.ctx.restore();
   }
 
   private drawDiamond(x: number, y: number, fill: string, stroke: string, alpha: number): void {
@@ -681,14 +760,14 @@ class WeChatCityGame {
     const dx = tx - GRID_W / 2;
     const dy = ty - GRID_H / 2;
     return {
-      x: this.originX + (dx - dy) * (TILE_W / 2),
-      y: this.originY + (dx + dy) * (TILE_H / 2),
+      x: (dx - dy) * (TILE_W / 2),
+      y: (dx + dy) * (TILE_H / 2),
     };
   }
 
   private worldToTile(wx: number, wy: number): { x: number; y: number } | null {
-    const localX = wx - this.originX;
-    const localY = wy - this.originY;
+    const localX = (wx - this.originX) / this.viewportScale;
+    const localY = (wy - this.originY) / this.viewportScale;
     const tx = (localX / (TILE_W / 2) + localY / (TILE_H / 2)) / 2 + GRID_W / 2;
     const ty = (localY / (TILE_H / 2) - localX / (TILE_W / 2)) / 2 + GRID_H / 2;
     return { x: Math.floor(tx), y: Math.floor(ty) };

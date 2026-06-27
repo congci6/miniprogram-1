@@ -9,6 +9,8 @@ const MATERIAL_LABELS: Record<MaterialId, string> = {
   metal: '金属',
   plastic: '塑料',
 };
+const MIN_CAMERA_ZOOM = 0.9;
+const MAX_CAMERA_ZOOM = 2.4;
 
 export class GameScene extends Phaser.Scene {
   private sim!: CitySimulation;
@@ -18,6 +20,8 @@ export class GameScene extends Phaser.Scene {
   private selectedTool: PlanningTool = 'inspect';
   private selectedTile: { x: number; y: number } | null = null;
   private paintedThisDrag = new Set<string>();
+  private isCameraPanning = false;
+  private panStart: { pointerX: number; pointerY: number; scrollX: number; scrollY: number } | null = null;
 
   constructor() { super({ key: 'GameScene' }); }
 
@@ -28,6 +32,7 @@ export class GameScene extends Phaser.Scene {
 
     this.cameras.main.setZoom(1.8);
     this.cameras.main.centerOn(0, 0);
+    this.input.mouse?.disableContextMenu();
     window.addEventListener('beforeunload', () => this.save());
 
     window.addEventListener('city-tool-change', ((event: Event) => {
@@ -80,13 +85,30 @@ export class GameScene extends Phaser.Scene {
       this.publishMetrics(result.message);
     });
 
-    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => this.applyToolAtPointer(p));
+    this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (this.shouldPanCamera(p)) {
+        this.startCameraPan(p);
+        return;
+      }
+      this.applyToolAtPointer(p);
+    });
     this.input.on('pointermove', (p: Phaser.Input.Pointer) => {
+      if (this.isCameraPanning) {
+        this.updateCameraPan(p);
+        return;
+      }
       const tile = this.tileFromPointer(p);
       this.isoRender.setHoverTile(tile);
       if (p.isDown && this.selectedTool !== 'inspect') this.applyToolAtPointer(p);
     });
-    this.input.on('pointerup', () => this.paintedThisDrag.clear());
+    this.input.on('pointerup', () => {
+      this.isCameraPanning = false;
+      this.panStart = null;
+      this.paintedThisDrag.clear();
+    });
+    this.input.on('wheel', (_pointer: Phaser.Input.Pointer, _objects: Phaser.GameObjects.GameObject[], _dx: number, dy: number) => {
+      this.zoomCamera(dy);
+    });
 
     this.publishMetrics(restoreMessage || '选择工具后点击地块开始规划');
   }
@@ -127,6 +149,34 @@ export class GameScene extends Phaser.Scene {
       detail: { tile: selectedTile, message: result.message },
     }));
     this.publishMetrics(result.message);
+  }
+
+  private shouldPanCamera(pointer: Phaser.Input.Pointer): boolean {
+    return pointer.rightButtonDown() || pointer.middleButtonDown();
+  }
+
+  private startCameraPan(pointer: Phaser.Input.Pointer): void {
+    this.isCameraPanning = true;
+    this.panStart = {
+      pointerX: pointer.x,
+      pointerY: pointer.y,
+      scrollX: this.cameras.main.scrollX,
+      scrollY: this.cameras.main.scrollY,
+    };
+    this.paintedThisDrag.clear();
+  }
+
+  private updateCameraPan(pointer: Phaser.Input.Pointer): void {
+    if (!this.panStart) return;
+    const zoom = this.cameras.main.zoom;
+    this.cameras.main.scrollX = this.panStart.scrollX - (pointer.x - this.panStart.pointerX) / zoom;
+    this.cameras.main.scrollY = this.panStart.scrollY - (pointer.y - this.panStart.pointerY) / zoom;
+  }
+
+  private zoomCamera(deltaY: number): void {
+    const currentZoom = this.cameras.main.zoom;
+    const nextZoom = Phaser.Math.Clamp(currentZoom + (deltaY > 0 ? -0.12 : 0.12), MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+    this.cameras.main.setZoom(nextZoom);
   }
 
   private tileFromPointer(pointer: Phaser.Input.Pointer): { x: number; y: number } | null {
