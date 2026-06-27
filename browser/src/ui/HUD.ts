@@ -284,6 +284,10 @@ export class HUD {
       ' ' + (this.metrics?.roadHierarchyPressure ?? 0) +
       ' / ' + (this.metrics?.roadHierarchyDriver ?? '道路容量可控') +
       ' -> ' + (this.metrics?.roadHierarchyAction ?? '继续按新区补道路') + '</span><br><br>' +
+      '<span style="color:#a8e0d4">通勤: ' + (this.metrics?.commuteCorridorScore ?? 0) +
+      ' / ' + (this.metrics?.commuteCorridorFocus ?? '顺畅') +
+      ' / ' + (this.metrics?.commuteCorridorDriver ?? '住岗与道路压力可控') +
+      ' -> ' + (this.metrics?.commuteCorridorAction ?? '继续沿主路扩新区') + '</span><br><br>' +
       '<strong>分区需求</strong> 住' + (this.metrics?.residentialDemand ?? 0) +
       ' / 商' + (this.metrics?.commercialDemand ?? 0) +
       ' / 工' + (this.metrics?.industrialDemand ?? 0) + '<br>' +

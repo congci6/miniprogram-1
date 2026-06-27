@@ -91,6 +91,13 @@ interface RoadHierarchyAdvisor {
   action: string;
 }
 
+interface CommuteCorridorAdvisor {
+  score: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 export interface PlanningActionResult {
   changed: boolean;
   message: string;
@@ -403,6 +410,10 @@ export class CitySimulation {
       roadHierarchyFocus: '骨架',
       roadHierarchyDriver: '道路尚未形成压力',
       roadHierarchyAction: '按分区接入道路',
+      commuteCorridorScore: 0,
+      commuteCorridorFocus: '起步',
+      commuteCorridorDriver: '尚未形成通勤压力',
+      commuteCorridorAction: '先接路规划住宅',
       healthCoverage: 0, educationCoverage: 0, safetyCoverage: 0,
       securityCoverage: 0, parkCoverage: 0, transitCoverage: 0,
       roadCoverage: 0, serviceGapPressure: 0, landValue: 30,
@@ -1045,6 +1056,7 @@ export class CitySimulation {
     const budget = this.estimateMonthlyBudget(stats, pollution);
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
     const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
+    const commuteAdvisor = this.createCommuteCorridorAdvisor(stats, roadCoverage, congestion, demand, roadAdvisor);
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
@@ -1074,7 +1086,7 @@ export class CitySimulation {
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
     const forecast = this.createRiskForecast(stats, budget.net);
     const budgetAdvisor = this.createBudgetBreakdownAdvisor(budget);
-    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor);
+    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
@@ -1095,6 +1107,10 @@ export class CitySimulation {
     this.metrics.roadHierarchyFocus = roadAdvisor.focus;
     this.metrics.roadHierarchyDriver = roadAdvisor.driver;
     this.metrics.roadHierarchyAction = roadAdvisor.action;
+    this.metrics.commuteCorridorScore = commuteAdvisor.score;
+    this.metrics.commuteCorridorFocus = commuteAdvisor.focus;
+    this.metrics.commuteCorridorDriver = commuteAdvisor.driver;
+    this.metrics.commuteCorridorAction = commuteAdvisor.action;
   }
 
   private calculateDemand(
@@ -1363,6 +1379,7 @@ export class CitySimulation {
     budgetAdvisor: BudgetBreakdownAdvisor,
     serviceAdvisor: ServiceGapAdvisor,
     roadAdvisor: RoadHierarchyAdvisor,
+    commuteAdvisor: CommuteCorridorAdvisor,
   ): DistrictPriorityAdvisor {
     const housingPressure = stats.housingCapacity === 0
       ? stats.roads > 0 || stats.zonedTiles > 0 ? 72 : 36
@@ -1383,6 +1400,12 @@ export class CitySimulation {
         focus: '交通',
         driver: roadAdvisor.driver,
         action: roadAdvisor.action,
+      },
+      {
+        score: commuteAdvisor.score,
+        focus: '通勤',
+        driver: commuteAdvisor.driver,
+        action: commuteAdvisor.action,
       },
       {
         score: stats.residentialTiles >= 2 ? serviceAdvisor.score : 0,
@@ -1422,6 +1445,70 @@ export class CitySimulation {
         focus: '均衡',
         driver: '暂无高优先级片区压力',
         action: '按当前目标稳步扩建',
+      };
+    }
+
+    return {
+      score: Math.round(Math.min(100, candidates.score)),
+      focus: candidates.focus,
+      driver: candidates.driver,
+      action: candidates.action,
+    };
+  }
+
+  private createCommuteCorridorAdvisor(
+    stats: GridStats,
+    roadCoverage: number,
+    congestion: number,
+    demand: DemandAnalysis,
+    roadAdvisor: RoadHierarchyAdvisor,
+  ): CommuteCorridorAdvisor {
+    const targetJobs = Math.floor(this.metrics.population * 0.45);
+    const jobGap = Math.max(0, targetJobs - stats.jobs);
+    const jobBalancePressure = targetJobs === 0 ? 0 : Math.min(100, (jobGap / Math.max(1, targetJobs)) * 100);
+    const accessPressure = stats.zonedTiles === 0 ? stats.roads === 0 ? 20 : 0 : Math.max(0, 70 - roadCoverage);
+    const homesWithoutJobsPressure = stats.residentialTiles > 0 && stats.jobs === 0 ? 64 : 0;
+    const jobsWithoutHomesPressure = stats.jobs > 0 && stats.housingCapacity === 0 ? 62 : 0;
+
+    const candidates = [
+      {
+        score: Math.round(congestion),
+        focus: '瓶颈',
+        driver: `拥堵${Math.round(congestion)}`,
+        action: roadAdvisor.action,
+      },
+      {
+        score: Math.round(accessPressure),
+        focus: '接入',
+        driver: `道路覆盖${Math.round(roadCoverage)}%`,
+        action: stats.roads > 0 ? '补道路接入分区' : '先铺第一段道路',
+      },
+      {
+        score: Math.round(Math.max(jobBalancePressure, homesWithoutJobsPressure)),
+        focus: '住岗',
+        driver: jobGap > 0 ? `岗位缺口${jobGap}` : '住宅片区缺少岗位',
+        action: demand.focus === '商业' || demand.focus === '工业' ? demand.action : '在住宅旁补商业或远端工业',
+      },
+      {
+        score: jobsWithoutHomesPressure,
+        focus: '迁入',
+        driver: '岗位已有但住宅不足',
+        action: demand.focus === '住宅' ? demand.action : '补住宅并保持接路',
+      },
+      {
+        score: roadAdvisor.focus === '稳定' ? 0 : Math.round(roadAdvisor.pressure * 0.85),
+        focus: '路网',
+        driver: roadAdvisor.driver,
+        action: roadAdvisor.action,
+      },
+    ].sort((a, b) => b.score - a.score)[0];
+
+    if (candidates.score < 35) {
+      return {
+        score: Math.round(candidates.score),
+        focus: '顺畅',
+        driver: '住岗与道路压力可控',
+        action: '继续沿主路扩新区',
       };
     }
 
