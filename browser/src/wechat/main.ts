@@ -77,21 +77,6 @@ const SERVICE_TOOL_TO_BUILDING: Partial<Record<PlanningTool, ServiceBuildingId>>
   clinic: 'community_clinic',
   school: 'community_school',
 };
-const ZONE_LABELS: Record<ZoneType, string> = {
-  [ZoneType.None]: '未规划',
-  [ZoneType.Residential]: '住宅',
-  [ZoneType.Commercial]: '商业',
-  [ZoneType.Industrial]: '工业',
-  [ZoneType.Civic]: '市政',
-  [ZoneType.Utility]: '设施',
-  [ZoneType.Office]: '办公',
-  [ZoneType.MixedUse]: '混合',
-};
-const TERRAIN_LABELS: Record<TerrainType, string> = {
-  [TerrainType.Plain]: '平地',
-  [TerrainType.Water]: '水域',
-  [TerrainType.Hill]: '丘陵',
-};
 const MATERIAL_LABELS: Record<MaterialId, string> = {
   wood: '木材',
   metal: '金属',
@@ -102,24 +87,10 @@ const TAX_LABELS: Record<CityTaxLevel, string> = {
   [CityTaxLevel.Normal]: '标准',
   [CityTaxLevel.High]: '高税',
 };
-const SERVICE_BUILDING_LABELS: Record<string, string> = {
-  residential_l1: '住宅 1 级',
-  residential_l2: '住宅 2 级',
-  residential_l3: '住宅 3 级',
-  commercial_l1: '商业建筑',
-  industrial_l1: '工业建筑',
-  community_park: '社区公园',
-  community_clinic: '社区诊所',
-  community_school: '社区学校',
-};
 const SERVICE_MARKER_COLORS: Record<string, string> = {
   community_park: '#8fe06f',
   community_clinic: '#ff7f9f',
   community_school: '#f2d479',
-};
-const ROAD_LABELS: Record<string, string> = {
-  local: '普通道路',
-  arterial: '主干道',
 };
 
 class WeChatCityGame {
@@ -498,6 +469,7 @@ class WeChatCityGame {
 
   private drawSidePanel(): void {
     const m = this.sim.metrics;
+    const inspection = this.selectedTile ? this.sim.getTileInspection(this.selectedTile.pos.x, this.selectedTile.pos.y) : null;
     const x = 12;
     const y = this.height - 236;
     const width = 238;
@@ -513,17 +485,17 @@ class WeChatCityGame {
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),
       `服务: 园${Math.round(m.parkCoverage)} 医${Math.round(m.healthCoverage)} 学${Math.round(m.educationCoverage)}`,
       this.compactText(`风险/预算: ${m.forecastFocus}${m.forecastRisk}/${m.budgetFocus}${m.budgetStress}`, 28),
-      this.selectedTile
-        ? `地块: (${this.selectedTile.pos.x}, ${this.selectedTile.pos.y}) ${ZONE_LABELS[this.selectedTile.zone]}`
+      inspection
+        ? `地块: ${inspection.title}`
         : '地块: 未选择',
-      this.selectedTile
-        ? `地形: ${TERRAIN_LABELS[this.selectedTile.terrain]} 道路: ${this.selectedTile.roadId ? (ROAD_LABELS[this.selectedTile.roadId] ?? '已连接') : '无'}`
-        : '点击地图查看详情',
-      this.selectedTile?.buildingId
-        ? `建筑: ${SERVICE_BUILDING_LABELS[this.selectedTile.buildingId] ?? this.selectedTile.buildingId}`
+      inspection
+        ? this.compactText(`图层: ${inspection.overlayLabel} ${inspection.overlayValue}`, 28)
+        : this.compactText(this.sim.getTileInspectionLegend(), 28),
+      inspection
+        ? this.compactText(`诊断: ${inspection.diagnosis}`, 28)
         : this.compactText(`卡点/优先: ${m.growthBottleneckFocus}${m.growthBottleneckScore}/${m.districtPriorityFocus}${m.districtPriorityScore}`, 28),
-      this.selectedTile?.zone === ZoneType.Residential
-        ? `住宅等级: ${this.sim.getResidentialLevel(this.selectedTile) || '待开发'}`
+      inspection && inspection.building !== '无'
+        ? this.compactText(`建筑: ${inspection.building}`, 28)
         : `订单交付: ${this.sim.completedOrders}`,
       this.compactText(`事件: ${m.recentEvents[0] ?? '暂无'}`, 22),
       this.compactText(`提醒: ${m.alertDigest}`, 28),

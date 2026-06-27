@@ -47,6 +47,10 @@ export interface CityObjective {
   id: string; title: string; description: string;
   advice: string; rewardCash: number; rewardExperience: number; completed: boolean;
 }
+export interface CityTileInspection {
+  title: string; terrain: string; zone: string; road: string; building: string;
+  overlayLabel: string; overlayValue: string; diagnosis: string; legend: string;
+}
 export type CityUnlockActionId = 'roadUpgrade' | 'residentialLevel2' | 'residentialLevel3';
 export interface CityUnlockEntry {
   label: string; unlockLevel: number; unlocked: boolean;

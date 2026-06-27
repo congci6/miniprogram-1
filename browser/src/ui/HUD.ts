@@ -3,6 +3,7 @@ import {
   CityMetrics,
   CityObjective,
   CityOrder,
+  CityTileInspection,
   CityTaxLevel,
   CityUnlockActionId,
   CityUnlockState,
@@ -97,6 +98,8 @@ export class HUD {
   private objectives: CityObjective[] = [];
   private unlockState: CityUnlockState | null = null;
   private buttons = new Map<PlanningTool, HTMLButtonElement>();
+  private selectedInspection: CityTileInspection | null = null;
+  private inspectionLegend = '图例: 绿住宅 蓝商业 橙工业 黑道路 粉服务 黄选中';
 
   constructor() {
     const c = document.getElementById('hud-overlay')!;
@@ -159,6 +162,8 @@ export class HUD {
     window.addEventListener('city-metrics-update', ((e: CustomEvent) => {
       if (e.detail.selectedTool) this.selectedTool = e.detail.selectedTool;
       if (e.detail.message) this.selectedMessage = e.detail.message;
+      if ('selectedInspection' in e.detail) this.selectedInspection = e.detail.selectedInspection ?? null;
+      this.inspectionLegend = e.detail.inspectionLegend ?? this.inspectionLegend;
       this.materials = e.detail.materials ?? this.materials;
       this.productionQueue = e.detail.productionQueue ?? this.productionQueue;
       this.productionSlots = e.detail.productionSlots ?? this.productionSlots;
@@ -173,6 +178,7 @@ export class HUD {
 
     window.addEventListener('city-tile-selected', ((e: CustomEvent) => {
       this.selectedTile = e.detail.tile ?? null;
+      this.selectedInspection = e.detail.inspection ?? null;
       this.selectedMessage = e.detail.message ?? '';
       this.renderSidePanel();
     }) as EventListener);
@@ -204,7 +210,13 @@ export class HUD {
   }
 
   private renderSidePanel(metrics?: CityMetrics): void {
-    const tileText = this.selectedTile
+    const tileText = this.selectedInspection
+      ? '<br>地块: ' + this.selectedInspection.title +
+        '<br>地形/道路: ' + this.selectedInspection.terrain + ' / ' + this.selectedInspection.road +
+        '<br>建筑: ' + this.selectedInspection.building +
+        '<br>图层: ' + this.selectedInspection.overlayLabel + ' ' + this.selectedInspection.overlayValue +
+        '<br>诊断: ' + this.selectedInspection.diagnosis
+      : this.selectedTile
       ? '<br>地块: (' + this.selectedTile.pos.x + ', ' + this.selectedTile.pos.y + ')' +
         '<br>地形: ' + TERRAIN_LABELS[this.selectedTile.terrain] +
         '<br>分区: ' + ZONE_LABELS[this.selectedTile.zone] +
@@ -215,7 +227,7 @@ export class HUD {
         (this.selectedTile.zone === ZoneType.Residential
           ? '<br>住宅等级: ' + this.residentialLevelLabel(this.selectedTile)
           : '')
-      : '<br>地块: 未选择';
+      : '<br>地块: 未选择<br>' + this.inspectionLegend;
 
     if (!metrics) {
       this.sidePanel.innerHTML = tileText;

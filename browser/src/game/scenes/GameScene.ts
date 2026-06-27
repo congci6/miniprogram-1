@@ -67,7 +67,11 @@ export class GameScene extends Phaser.Scene {
       if (result.changed) this.isoRender.render();
       if (result.changed) this.save();
       window.dispatchEvent(new CustomEvent('city-tile-selected', {
-        detail: { tile: this.sim.grid.getTile(this.selectedTile.x, this.selectedTile.y), message: result.message },
+        detail: {
+          tile: this.sim.grid.getTile(this.selectedTile.x, this.selectedTile.y),
+          inspection: this.sim.getTileInspection(this.selectedTile.x, this.selectedTile.y),
+          message: result.message,
+        },
       }));
       this.publishMetrics(result.message);
     });
@@ -80,7 +84,11 @@ export class GameScene extends Phaser.Scene {
       if (result.changed) this.isoRender.render();
       if (result.changed) this.save();
       window.dispatchEvent(new CustomEvent('city-tile-selected', {
-        detail: { tile: this.sim.grid.getTile(this.selectedTile.x, this.selectedTile.y), message: result.message },
+        detail: {
+          tile: this.sim.grid.getTile(this.selectedTile.x, this.selectedTile.y),
+          inspection: this.sim.getTileInspection(this.selectedTile.x, this.selectedTile.y),
+          message: result.message,
+        },
       }));
       this.publishMetrics(result.message);
     });
@@ -146,7 +154,7 @@ export class GameScene extends Phaser.Scene {
     if (result.changed) this.save();
 
     window.dispatchEvent(new CustomEvent('city-tile-selected', {
-      detail: { tile: selectedTile, message: result.message },
+      detail: { tile: selectedTile, inspection: this.sim.getTileInspection(tile.x, tile.y), message: result.message },
     }));
     this.publishMetrics(result.message);
   }
@@ -198,6 +206,8 @@ export class GameScene extends Phaser.Scene {
         objectives: this.sim.getObjectives(),
         unlockState: this.sim.getUnlockState(),
         selectedTool: this.selectedTool,
+        selectedInspection: this.selectedTile ? this.sim.getTileInspection(this.selectedTile.x, this.selectedTile.y) : null,
+        inspectionLegend: this.sim.getTileInspectionLegend(),
         message,
       },
     }));

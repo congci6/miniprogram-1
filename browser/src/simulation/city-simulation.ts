@@ -5,6 +5,7 @@ import {
   CityObjective,
   CityOrder,
   CityPolicy,
+  CityTileInspection,
   CityTaxLevel,
   CityUnlockState,
   MaterialCost,
@@ -179,6 +180,25 @@ const ZONE_STATS: Partial<Record<ZoneType, { housing: number; jobs: number; poll
   [ZoneType.Commercial]: { housing: 0, jobs: 18, pollution: 2, label: '商业区' },
   [ZoneType.Industrial]: { housing: 0, jobs: 28, pollution: 7, label: '工业区' },
 };
+
+const INSPECTION_ZONE_LABELS: Record<ZoneType, string> = {
+  [ZoneType.None]: '未规划',
+  [ZoneType.Residential]: '住宅区',
+  [ZoneType.Commercial]: '商业区',
+  [ZoneType.Industrial]: '工业区',
+  [ZoneType.Civic]: '市政区',
+  [ZoneType.Utility]: '设施区',
+  [ZoneType.Office]: '办公区',
+  [ZoneType.MixedUse]: '混合区',
+};
+
+const INSPECTION_TERRAIN_LABELS: Record<TerrainType, string> = {
+  [TerrainType.Plain]: '平地',
+  [TerrainType.Water]: '水域',
+  [TerrainType.Hill]: '丘陵',
+};
+
+const TILE_INSPECTION_LEGEND = '图例: 绿住宅 蓝商业 橙工业 黑道路 粉服务 黄选中';
 
 const MATERIAL_LABELS: Record<MaterialId, string> = {
   wood: '木材',
@@ -653,6 +673,32 @@ export class CitySimulation {
 
   getRoadLabel(roadId: string): string {
     return ROAD_LABELS[roadId] ?? (roadId ? roadId : '无');
+  }
+
+  getTileInspectionLegend(): string {
+    return TILE_INSPECTION_LEGEND;
+  }
+
+  getTileInspection(x: number, y: number): CityTileInspection | null {
+    const tile = this.grid.getTile(x, y);
+    if (!tile) return null;
+    const terrain = INSPECTION_TERRAIN_LABELS[tile.terrain];
+    const zone = INSPECTION_ZONE_LABELS[tile.zone];
+    const road = tile.roadId ? this.getRoadLabel(tile.roadId) : '无';
+    const building = this.getInspectionBuildingLabel(tile.zone, tile.buildingId);
+    const overlay = this.getTileOverlaySummary(x, y);
+    const title = tile.roadId ? `(${x}, ${y}) ${road}` : `(${x}, ${y}) ${zone}`;
+    return {
+      title,
+      terrain,
+      zone,
+      road,
+      building,
+      overlayLabel: overlay.label,
+      overlayValue: overlay.value,
+      diagnosis: this.getTileDiagnosis(x, y),
+      legend: TILE_INSPECTION_LEGEND,
+    };
   }
 
   getObjectives(): CityObjective[] {
@@ -2164,6 +2210,91 @@ export class CitySimulation {
       if (service.definition[field] <= 0) return false;
       return Math.abs(residential.x - service.x) + Math.abs(residential.y - service.y) <= service.definition.radius;
     });
+  }
+
+  private getInspectionBuildingLabel(zone: ZoneType, buildingId: string): string {
+    if (!buildingId) return zone === ZoneType.None ? '无' : '待开发';
+    const service = SERVICE_BUILDINGS[buildingId as ServiceBuildingId];
+    if (service) return service.label;
+    const residentialLevel = this.getResidentialLevel({ zone, buildingId });
+    if (residentialLevel > 0) return `住宅 ${residentialLevel} 级`;
+    if (buildingId === 'commercial_l1') return '商业建筑';
+    if (buildingId === 'industrial_l1') return '工业建筑';
+    return buildingId;
+  }
+
+  private getTileOverlaySummary(x: number, y: number): { label: string; value: string } {
+    const tile = this.grid.getTile(x, y);
+    if (!tile) return { label: '图层', value: '未知' };
+    if (tile.roadId) {
+      return { label: '交通', value: `${this.getRoadLabel(tile.roadId)} 容量${ROAD_CAPACITY[tile.roadId] ?? 1}` };
+    }
+
+    const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
+    if (service) {
+      const effects = [
+        service.parkValue > 0 ? '公园' : '',
+        service.healthValue > 0 ? '医疗' : '',
+        service.educationValue > 0 ? '教育' : '',
+      ].filter(Boolean).join('/');
+      return { label: '服务', value: `${effects || '公共'} 半径${service.radius}` };
+    }
+
+    if (tile.terrain !== TerrainType.Plain) return { label: '地形', value: INSPECTION_TERRAIN_LABELS[tile.terrain] };
+    const zoneStats = ZONE_STATS[tile.zone];
+    if (!zoneStats) {
+      return { label: '规划', value: this.hasAdjacentRoad(x, y) ? '临路空地' : '需接道路' };
+    }
+    if (!tile.buildingId) {
+      return { label: '开发', value: this.hasAdjacentRoad(x, y) ? `${zoneStats.label}待开发` : `${zoneStats.label}未接路` };
+    }
+    if (tile.zone === ZoneType.Residential) {
+      const level = this.getResidentialLevel(tile);
+      return { label: '住房', value: `Lv${level} 容量${RESIDENTIAL_CAPACITY_BY_LEVEL[level] ?? 0}` };
+    }
+    return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}` };
+  }
+
+  private getTileDiagnosis(x: number, y: number): string {
+    const tile = this.grid.getTile(x, y);
+    if (!tile) return '地块不在地图内';
+    if (tile.terrain === TerrainType.Water) return '水域暂时不能规划，保留作自然边界';
+    if (tile.terrain === TerrainType.Hill) return '丘陵暂时不能规划，适合作为远期资源或景观边界';
+    if (tile.roadId) {
+      return tile.roadId === 'arterial'
+        ? '主干道容量高，适合承接新区骨架'
+        : this.isLevelUnlocked(ROAD_UPGRADE_UNLOCK_LEVEL) ? '普通道路可升级为主干道缓解瓶颈' : `升到 Lv${ROAD_UPGRADE_UNLOCK_LEVEL} 后可升级主干道`;
+    }
+
+    const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
+    if (service) return `${service.label}覆盖周边住宅，半径${service.radius}`;
+
+    const hasRoadAccess = this.hasAdjacentRoad(x, y);
+    if (tile.zone === ZoneType.None) return hasRoadAccess ? '临路空地，可规划分区或服务建筑' : '未接路空地，先铺道路打开开发';
+    if (!hasRoadAccess) return `${INSPECTION_ZONE_LABELS[tile.zone]}未接路，无法自然开发`;
+    if (!tile.buildingId) return `${INSPECTION_ZONE_LABELS[tile.zone]}已接路，当前需求${this.getDemandForZone(tile.zone)}`;
+
+    if (tile.zone === ZoneType.Residential) {
+      const level = this.getResidentialLevel(tile);
+      if (level <= 0) return '住宅分区等待自然入住';
+      if (level >= MAX_RESIDENTIAL_LEVEL) return '住宅已达当前最高等级，继续补新住宅片区';
+      const nextLevel = level + 1;
+      const cost = RESIDENTIAL_UPGRADE_COSTS[nextLevel];
+      return this.hasMaterials(cost) ? `住宅可升级到 ${nextLevel} 级` : `住宅升级需${this.formatMissingMaterials(cost)}`;
+    }
+
+    if (tile.zone === ZoneType.Commercial) return '商业提供岗位，靠近住宅与道路客流更稳';
+    if (tile.zone === ZoneType.Industrial) return '工业提供岗位和材料基础，注意污染远离住宅';
+    return '保持接路并观察服务覆盖';
+  }
+
+  private getDemandForZone(zone: ZoneType): number {
+    switch (zone) {
+      case ZoneType.Residential: return this.metrics.residentialDemand;
+      case ZoneType.Commercial: return this.metrics.commercialDemand;
+      case ZoneType.Industrial: return this.metrics.industrialDemand;
+      default: return 0;
+    }
   }
 
   private processPopulation(): void {
