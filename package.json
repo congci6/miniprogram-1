@@ -10,7 +10,6 @@
     "verify": "npm --prefix browser run build:wechat && node tools/verify-wechat-runtime.mjs --mode=scaffold && npm run smoke:wechat",
     "verify:scaffold": "node tools/verify-wechat-runtime.mjs --mode=scaffold",
     "verify:exported": "node tools/verify-wechat-runtime.mjs --mode=exported",
-    "verify:wechat": "npm --prefix browser run build:wechat && node tools/verify-wechat-runtime.mjs --mode=scaffold && npm run smoke:wechat",
-    "verify:legacy-unity": "node tools/verify-unity-scaffold.mjs --mode=scaffold"
+    "verify:wechat": "npm --prefix browser run build:wechat && node tools/verify-wechat-runtime.mjs --mode=scaffold && npm run smoke:wechat"
   }
 }
