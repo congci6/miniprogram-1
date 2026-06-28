@@ -352,4 +352,140 @@ assert(calls.setStorageSync > 0 && storage.size > 0, 'Runtime should save city s
 lifecycleCallbacks.show();
 assert(calls.getStorageSync > 0, 'Runtime should read city state on show.');
 
+function runFallbackRuntimeSmoke(label, options = {}) {
+  const localFrameCallbacks = [];
+  const localLifecycleCallbacks = { hide: null, show: null };
+  const localTouchCallbacks = { start: null, move: null, end: null };
+  const localCalls = {
+    createCanvas: 0,
+    getContext: 0,
+    fillText: 0,
+    fillRect: 0,
+    requestAnimationFrame: 0,
+    setStorageSync: 0,
+    getStorageSync: 0,
+    vibrateShort: 0,
+  };
+
+  const localContext2d = {
+    fillStyle: '',
+    strokeStyle: '',
+    font: '',
+    textAlign: 'left',
+    textBaseline: 'top',
+    lineWidth: 1,
+    globalAlpha: 1,
+    setTransform() {},
+    clearRect() {},
+    fillRect() { localCalls.fillRect += 1; },
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    closePath() {},
+    fill() {},
+    stroke() {},
+    save() {},
+    restore() {},
+    translate() {},
+    scale() {},
+    arc() {},
+    arcTo() {},
+    createLinearGradient() {
+      return { addColorStop() {} };
+    },
+    fillText() { localCalls.fillText += 1; },
+    measureText(text) {
+      const width = Array.from(String(text)).reduce((total, ch) => total + (ch.charCodeAt(0) > 127 ? 12 : 7), 0);
+      return { width };
+    },
+  };
+
+  const localCanvas = {
+    width: 0,
+    height: 0,
+    getContext(type) {
+      assert(type === '2d', `${label}: unexpected canvas context type ${type}.`);
+      localCalls.getContext += 1;
+      return localContext2d;
+    },
+    requestAnimationFrame(callback) {
+      localCalls.requestAnimationFrame += 1;
+      localFrameCallbacks.push(callback);
+      return localFrameCallbacks.length;
+    },
+  };
+
+  const localWx = {
+    createCanvas() {
+      localCalls.createCanvas += 1;
+      return localCanvas;
+    },
+    getSystemInfoSync() {
+      return { windowWidth: 812, windowHeight: 375, pixelRatio: 2 };
+    },
+    onTouchStart(callback) { localTouchCallbacks.start = callback; },
+    onTouchMove(callback) { localTouchCallbacks.move = callback; },
+    onTouchEnd(callback) { localTouchCallbacks.end = callback; },
+    onHide(callback) { localLifecycleCallbacks.hide = callback; },
+    onShow(callback) { localLifecycleCallbacks.show = callback; },
+  };
+
+  if (!options.omitStorage) {
+    localWx.setStorageSync = () => {
+      localCalls.setStorageSync += 1;
+      if (options.throwStorage) throw new Error(`${label}: storage write failed`);
+    };
+    localWx.getStorageSync = () => {
+      localCalls.getStorageSync += 1;
+      if (options.throwStorage) throw new Error(`${label}: storage read failed`);
+      return undefined;
+    };
+  }
+
+  if (!options.omitVibrate) {
+    localWx.vibrateShort = () => {
+      localCalls.vibrateShort += 1;
+      if (options.throwVibrate) throw new Error(`${label}: vibrate failed`);
+    };
+  }
+
+  const localSandbox = {
+    console,
+    wx: localWx,
+    GameGlobal: {},
+    setTimeout(callback) {
+      localFrameCallbacks.push(callback);
+      return localFrameCallbacks.length;
+    },
+    clearTimeout() {},
+  };
+
+  new Script(source, { filename: `miniprogram/game.js:${label}` }).runInContext(createContext(localSandbox));
+  assert(localSandbox.GameGlobal.__POCKET_CITY_RUNTIME__ === 'NON_UNITY_WECHAT_CANVAS_RUNTIME', `${label}: runtime marker was not published.`);
+  assert(localCalls.createCanvas === 1, `${label}: runtime should create one canvas.`);
+  assert(localCalls.getContext === 1, `${label}: runtime should request one 2D context.`);
+  assert(localTouchCallbacks.start && localTouchCallbacks.end, `${label}: runtime should register touch callbacks.`);
+  assert(localLifecycleCallbacks.hide && localLifecycleCallbacks.show, `${label}: runtime should register lifecycle callbacks.`);
+  assert(localFrameCallbacks.length > 0, `${label}: runtime should schedule a frame.`);
+  localFrameCallbacks.shift()(Date.now() + 16);
+  assert(localCalls.fillRect > 0, `${label}: runtime should draw canvas shapes.`);
+  assert(localCalls.fillText > 0, `${label}: runtime should draw UI text.`);
+
+  const roadButtonTouch = { clientX: 190, clientY: 344 };
+  localTouchCallbacks.start({ touches: [roadButtonTouch] });
+  localTouchCallbacks.end({ changedTouches: [roadButtonTouch] });
+  localLifecycleCallbacks.hide();
+  localLifecycleCallbacks.show();
+  if (options.throwStorage) {
+    assert(localCalls.getStorageSync > 0, `${label}: runtime should exercise failing storage reads.`);
+    assert(localCalls.setStorageSync > 0, `${label}: runtime should exercise failing storage writes.`);
+  }
+  if (options.throwVibrate) {
+    assert(localCalls.vibrateShort > 0, `${label}: runtime should exercise failing haptic feedback.`);
+  }
+}
+
+runFallbackRuntimeSmoke('missing storage and haptics', { omitStorage: true, omitVibrate: true });
+runFallbackRuntimeSmoke('throwing storage and haptics', { throwStorage: true, throwVibrate: true });
+
 console.log('WeChat runtime smoke passed.');
