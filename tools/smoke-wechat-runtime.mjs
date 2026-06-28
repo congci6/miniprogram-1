@@ -352,6 +352,24 @@ assert(calls.setStorageSync > 0 && storage.size > 0, 'Runtime should save city s
 lifecycleCallbacks.show();
 assert(calls.getStorageSync > 0, 'Runtime should read city state on show.');
 
+const corruptReadsBefore = calls.getStorageSync;
+const corruptSaveKey = latestStorageKey();
+storage.set(corruptSaveKey, { version: 999, tiles: [], metrics: null });
+lifecycleCallbacks.show();
+assert(calls.getStorageSync > corruptReadsBefore, 'Runtime should try to read corrupted city state on show.');
+drawNextFrame('corrupted save recovery');
+assert(calls.fillRect > 0 && calls.fillText > 0, 'Runtime should keep drawing after a corrupted save fallback.');
+const recoverySavesBefore = calls.setStorageSync;
+const recoveryRoadTile = screenForTile(11, 9);
+tap(roadToolCenter.x, roadToolCenter.y);
+tap(recoveryRoadTile.x, recoveryRoadTile.y);
+assert(calls.setStorageSync > recoverySavesBefore, 'Runtime should continue saving after a corrupted save fallback.');
+const snapshotAfterCorruptFallback = latestSnapshot();
+assert(
+  findSavedTile(snapshotAfterCorruptFallback, 11, 9)?.roadId === 'local',
+  'Runtime should continue applying tools after ignoring a corrupted save.',
+);
+
 function runFallbackRuntimeSmoke(label, options = {}) {
   const localFrameCallbacks = [];
   const localLifecycleCallbacks = { hide: null, show: null };
