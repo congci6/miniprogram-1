@@ -521,13 +521,32 @@ class WeChatCityGame {
     this.ctx.fillStyle = 'rgba(18,24,28,0.9)';
     this.ctx.fillRect(0, 0, this.width, 42);
     this.ctx.fillStyle = '#f4f7ef';
-    this.ctx.font = 'bold 14px sans-serif';
+    const compact = this.width < 420;
+    this.ctx.font = `bold ${compact ? 12 : 14}px sans-serif`;
     this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(`第 ${m.day} 天 Lv${m.cityLevel}`, 14, 21);
-    this.ctx.fillText(`人口 ${m.population.toLocaleString()}`, this.width * 0.25, 21);
-    this.ctx.fillText(`现金 $${m.cash.toLocaleString()}`, this.width * 0.48, 21);
-    this.ctx.fillText(`幸福 ${m.happiness}`, this.width * 0.72, 21);
-    this.ctx.fillText(`评分 ${m.cityScore}`, this.width - 90, 21);
+    this.ctx.textAlign = 'left';
+    const labels = compact
+      ? [
+        `第${m.day}天 Lv${m.cityLevel}`,
+        `人${m.population.toLocaleString()}`,
+        `$${m.cash.toLocaleString()}`,
+        `福${m.happiness}`,
+        `评${m.cityScore}`,
+      ]
+      : [
+        `第 ${m.day} 天 Lv${m.cityLevel}`,
+        `人口 ${m.population.toLocaleString()}`,
+        `现金 $${m.cash.toLocaleString()}`,
+        `幸福 ${m.happiness}`,
+        `评分 ${m.cityScore}`,
+      ];
+    const padding = compact ? 8 : 14;
+    const gap = compact ? 4 : 8;
+    const columnWidth = Math.max(0, (this.width - padding * 2 - gap * (labels.length - 1)) / labels.length);
+    labels.forEach((label, index) => {
+      const x = padding + index * (columnWidth + gap);
+      this.ctx.fillText(this.fitTextToWidth(label, columnWidth), x, 21);
+    });
   }
 
   private drawSidePanel(): void {
