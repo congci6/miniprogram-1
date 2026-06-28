@@ -1,18 +1,18 @@
 # AGENTS.md
 
 ## Project
-This is a Unity-first WeChat Mini Game city-building simulation. The retired TypeScript prototype is stored under `legacy/typescript-prototype/` only for migration reference.
+This is a non-Unity WeChat Mini Game city-building simulation. The current playable runtime is generated from the TypeScript project under `browser/`; Unity project code is not part of the active architecture.
 
 ## Rules
-- Active gameplay work belongs in `unity/Assets/Scripts/PocketCity`.
-- Keep core simulation in `PocketCity.Core` and `PocketCity.Simulation` independent from Unity scene objects and WeChat APIs.
-- Unity runtime glue belongs in `PocketCity.Runtime`.
-- WeChat platform calls must stay behind `WeChatMiniGameBridge` or WebGL `.jslib` files.
-- Balance and building definitions should be generated into `CityConfig` assets, not hard-coded in scene behaviours.
-- Do not reintroduce a TypeScript / Three.js runtime as an active version.
+- Active gameplay work belongs in `browser/src`.
+- Keep core simulation in `browser/src/simulation` and shared types in `browser/src/types` independent from DOM, Phaser scene objects, and WeChat APIs.
+- Browser-only debug glue may use Phaser under `browser/src/game` and DOM HUD code under `browser/src/ui`.
+- WeChat platform calls belong in `browser/src/wechat/main.ts` behind the local `WeChatRuntime` interface; do not hand-edit generated `miniprogram/game.js`.
+- Do not add or restore Unity project code; migrate useful historical behavior into the TypeScript simulation/runtime instead.
+- Do not introduce Three.js, Worker, WebGL2, SharedArrayBuffer, DOM, or Phaser dependencies into the WeChat Canvas runtime.
 - Do not copy assets, UI, names, mechanics, task text, or balance values from existing city-builder IP.
 
 ## Verification
 - Run `npm run verify` after scaffold or file-structure changes.
-- In a Unity-equipped environment, open `unity/`, run the default config generator, and check the Console for C# compile errors.
-- For release candidates, export through the WeChat mini game conversion SDK and record package size and FPS.
+- Run `npm run smoke:wechat` after touching `browser/src/wechat/main.ts`, generated package flow, or save/lifecycle behavior.
+- For release candidates, build with `npm run build:wechat`, open `miniprogram/` in WeChat DevTools, and record package size and FPS.

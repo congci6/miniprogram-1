@@ -1,4 +1,5 @@
-﻿import { buildingIdForTool } from '../ui/build-menu';
+﻿import { getBuildingConfig } from '../data/buildings';
+import { buildingIdForTool } from '../ui/build-menu';
 import type * as THREE from 'three';
 import { HudController, type HudAction } from '../ui/hud';
 import { ToastQueue } from '../ui/toast';
@@ -11,7 +12,9 @@ import { createRuntimeCanvas, getWx, type RuntimeCanvas } from '../platform/wx-c
 import { LocalStorageAdapter } from '../platform/wx-storage';
 import { registerShareEntry } from '../platform/wx-share';
 import { CityState } from '../simulation/city-state';
+import { describeUpgradeReadiness } from '../simulation/upgrade';
 import { previewConstruction, type ConstructionPreview } from '../simulation/construction-preview';
+import { demandAdvisor } from '../simulation/demand-advisor';
 import { createSave, deserializeSave, serializeSave } from '../simulation/save';
 import { tickCity } from '../simulation/tick';
 import type { GameCommand, GridPos, OverlayMode } from '../types';
@@ -43,6 +46,7 @@ export class CityGameApp {
   private buildPreview?: ConstructionPreview;
   private pendingConfirmation?: { tool: BuildToolId; pos: GridPos };
   private roadAnchor?: GridPos;
+  private selectedPos?: GridPos;
   private lastAutosave = 0;
 
   start(): void {
@@ -67,7 +71,10 @@ export class CityGameApp {
   }
 
   private frame(deltaSeconds: number, now: number): void {
-    tickCity(this.city, deltaSeconds);
+    const tickResult = tickCity(this.city, deltaSeconds);
+    if (tickResult.worldChanged) {
+      this.cityScene.sync(this.city);
+    }
     this.announceNewUnlocks();
     if (this.overlayMode !== 'normal') {
       this.cityScene.syncOverlay(this.city);
@@ -81,6 +88,8 @@ export class CityGameApp {
       buildPreview: this.buildPreview,
       toast: this.toast.current(now),
       roadAnchor: this.roadAnchor ? `${this.roadAnchor.x},${this.roadAnchor.y}` : undefined,
+      selectedBuildingLabels: this.selectedBuildingLabels(),
+      demandAdvisorLabel: demandAdvisor(this.city.metrics).text,
     });
     this.overlay.render(this.renderer);
 
@@ -101,7 +110,25 @@ export class CityGameApp {
     if (!gridPos) {
       return;
     }
+    this.selectedPos = gridPos;
     this.cityScene.setSelection(gridPos);
+
+    if (isZoneTool(this.selectedTool)) {
+      const zone = zoneTypeForTool(this.selectedTool);
+      const areaX = Math.max(0, Math.min(this.city.grid.width - 1, gridPos.x - 1));
+      const areaY = Math.max(0, Math.min(this.city.grid.height - 1, gridPos.y - 1));
+      this.runCommand({
+        type: 'SET_ZONE',
+        zone,
+        area: {
+          x: areaX,
+          y: areaY,
+          w: Math.min(3, this.city.grid.width - areaX),
+          h: Math.min(3, this.city.grid.height - areaY),
+        },
+      });
+      return;
+    }
 
     if (this.selectedTool === 'road') {
       this.buildPreview = previewConstruction(this.city, { type: 'road', from: this.roadAnchor }, gridPos);
@@ -165,6 +192,7 @@ export class CityGameApp {
         this.cityScene.setOverlayMode(this.overlayMode, this.city);
         this.selectedTool = 'residential_pod';
         this.roadAnchor = undefined;
+        this.selectedPos = undefined;
         this.clearPlacementPreview();
         this.rememberUnlockedTools();
         this.toast.show('已创建新城市');
@@ -256,6 +284,22 @@ export class CityGameApp {
   private clearPlacementPreview(): void {
     this.buildPreview = undefined;
     this.pendingConfirmation = undefined;
+  }
+
+  private selectedBuildingLabels(): string[] | undefined {
+    if (!this.selectedPos) {
+      return undefined;
+    }
+    const building = this.city.getBuildingAt(this.selectedPos);
+    if (!building) {
+      return undefined;
+    }
+    const config = getBuildingConfig(building.configId);
+    const readiness = describeUpgradeReadiness(this.city, building);
+    return [
+      `${config.name} Lv.${building.level + 1}  ??? ${Math.max(0, Math.floor(this.city.elapsedSeconds - building.placedAt))}s`,
+      readiness.ready ? '??????????' : `?????${readiness.detail}`,
+    ];
   }
 
   private rememberUnlockedTools(): void {

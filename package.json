@@ -1,12 +1,15 @@
 {
-  "name": "pocket-city-planner-unity",
+  "name": "pocket-city-planner-minigame",
   "version": "0.2.0",
   "private": true,
-  "description": "Unity-first WeChat mini game project for Pocket City Planner.",
+  "description": "Non-Unity WeChat mini game project for Pocket City Planner.",
   "type": "module",
   "scripts": {
-    "verify": "node tools/verify-unity-scaffold.mjs --mode=scaffold",
-    "verify:scaffold": "node tools/verify-unity-scaffold.mjs --mode=scaffold",
-    "verify:exported": "node tools/verify-unity-scaffold.mjs --mode=exported"
+    "build:wechat": "npm --prefix browser run build:wechat",
+    "smoke:wechat": "node tools/smoke-wechat-runtime.mjs",
+    "verify": "npm --prefix browser run build:wechat && node tools/verify-wechat-runtime.mjs --mode=scaffold && npm run smoke:wechat",
+    "verify:scaffold": "node tools/verify-wechat-runtime.mjs --mode=scaffold",
+    "verify:exported": "node tools/verify-wechat-runtime.mjs --mode=exported",
+    "verify:wechat": "npm --prefix browser run build:wechat && node tools/verify-wechat-runtime.mjs --mode=scaffold && npm run smoke:wechat"
   }
 }

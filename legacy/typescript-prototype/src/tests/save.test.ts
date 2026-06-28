@@ -13,6 +13,9 @@ describe('save game', () => {
     const restored = deserializeSave(serializeSave(createSave(city, 1000)));
     expect(restored.serialize().buildings).toHaveLength(beforeCount + 1);
     expect(restored.metrics.cash).toBe(city.metrics.cash);
+    const restoredBuilding = restored.getBuildings().find((building) => building.pos.x === 12 && building.pos.y === 12);
+    expect(restoredBuilding?.level).toBe(0);
+    expect(restoredBuilding?.placedAt).toBeGreaterThanOrEqual(0);
   });
 
   it('loads older saves that do not contain evaluation fields', () => {

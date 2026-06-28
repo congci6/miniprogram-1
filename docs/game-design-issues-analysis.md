@@ -311,16 +311,10 @@ ServiceRadius  // 在BuildingDefinition中
 ## 💡 快速修复建议
 
 ### 立即可改（配置调整）
-```csharp
-// CityConfig.cs
-InitialCash = 15000;              // 12000 → 15000
-DemolishRefundRate = 0.4f;        // 0.25 → 0.4
-DaysPerBudgetPeriod = 20;         // 30 → 20
-ResidentTaxPerPerson = 3;         // 2 → 3
-LowServiceHappinessPenalty = 8;   // 12 → 8
-UtilityShortageHappinessPenalty = 12;  // 18 → 12
-CongestionHappinessPenalty = 8;   // 10 → 8
-ZoneCostPerTile = 12;             // 6 → 12
+```text
+Active balance edits now belong in browser/src/simulation/city-simulation.ts
+and docs/BALANCE.md. Search the existing constants first, change only the
+verified values, then run npm run verify.
 ```
 
 ### 需要代码改动

@@ -30,6 +30,11 @@ export class MapOverlay extends THREE.Group {
       return;
     }
 
+    if (this.mode === 'zone') {
+      this.buildZoneOverlay(city);
+      return;
+    }
+
     this.buildPollutionOverlay(city);
   }
 

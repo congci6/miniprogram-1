@@ -1,4 +1,47 @@
-import type { BuildingConfig } from '../types';
+﻿import type { BuildingConfig, BuildingUpgradeStage } from '../types';
+
+export const UPGRADE_STAGES: BuildingUpgradeStage[] = [
+  {
+    level: 0,
+    requiredAgeSeconds: 0,
+    minServiceCoverage: 0,
+    minHappiness: 0,
+    minDemand: 0,
+    capacityMultiplier: 1,
+    jobsMultiplier: 1,
+    upkeepMultiplier: 1,
+  },
+  {
+    level: 1,
+    requiredAgeSeconds: 30,
+    minServiceCoverage: 0.3,
+    minHappiness: 50,
+    minDemand: 15,
+    capacityMultiplier: 1.5,
+    jobsMultiplier: 1.4,
+    upkeepMultiplier: 1.2,
+  },
+  {
+    level: 2,
+    requiredAgeSeconds: 90,
+    minServiceCoverage: 0.5,
+    minHappiness: 60,
+    minDemand: 25,
+    capacityMultiplier: 2.2,
+    jobsMultiplier: 2,
+    upkeepMultiplier: 1.5,
+  },
+  {
+    level: 3,
+    requiredAgeSeconds: 180,
+    minServiceCoverage: 0.7,
+    minHappiness: 68,
+    minDemand: 35,
+    capacityMultiplier: 3.5,
+    jobsMultiplier: 3,
+    upkeepMultiplier: 2,
+  },
+];
 
 export const BUILDINGS: BuildingConfig[] = [
   {

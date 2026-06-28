@@ -27,6 +27,8 @@ export type HudState = {
   taxRate: number;
   toast?: string;
   roadAnchor?: string;
+  selectedBuildingLabels?: string[];
+  demandAdvisorLabel?: string;
 };
 
 export class HudController {
@@ -85,6 +87,8 @@ export class HudController {
     ctx.save();
     ctx.textBaseline = 'middle';
     this.drawTopPanel(ctx, state);
+    this.drawSelectedBuildingBadge(ctx, state.selectedBuildingLabels);
+    this.drawDemandAdvisorBadge(ctx, state.selectedBuildingLabels, state.demandAdvisorLabel);
     this.drawOverlayBadge(ctx, state.overlayMode);
     if (state.buildPreview) {
       this.drawBuildPreview(ctx, state.buildPreview);
@@ -129,6 +133,42 @@ export class HudController {
       ctx.fillStyle = lineColors[index] ?? '#e2e8f0';
       ctx.fillText(line, x + 14, y + 39 + index * 14);
     });
+  }
+
+  private drawSelectedBuildingBadge(ctx: CanvasRenderingContext2D, lines?: string[]): void {
+    if (!lines || lines.length === 0) {
+      return;
+    }
+    const width = Math.min(380, Math.max(210, Math.max(...lines.map((line) => line.length)) * 10));
+    const height = 18 + lines.length * 16;
+    roundedRect(ctx, 12, 156, width, height, 8);
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.82)';
+    ctx.fill();
+    ctx.fillStyle = '#fde68a';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'start';
+    lines.forEach((line, index) => {
+      ctx.fillText(line, 24, 170 + index * 15);
+    });
+  }
+
+  private drawDemandAdvisorBadge(
+    ctx: CanvasRenderingContext2D,
+    selectedBuildingLabels: string[] | undefined,
+    label: string | undefined,
+  ): void {
+    if (!label) {
+      return;
+    }
+    const y = 156 + (selectedBuildingLabels && selectedBuildingLabels.length > 0 ? 18 + selectedBuildingLabels.length * 16 + 8 : 0);
+    const width = Math.min(420, Math.max(240, label.length * 10));
+    roundedRect(ctx, 12, y, width, 28, 8);
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+    ctx.fill();
+    ctx.fillStyle = '#bfdbfe';
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'start';
+    ctx.fillText(label, 24, y + 14);
   }
 
   private drawOverlayBadge(ctx: CanvasRenderingContext2D, overlayMode: OverlayMode): void {
