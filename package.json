@@ -9,6 +9,6 @@
     "verify": "npm --prefix browser run build:wechat && node tools/verify-unity-scaffold.mjs --mode=scaffold",
     "verify:scaffold": "node tools/verify-unity-scaffold.mjs --mode=scaffold",
     "verify:exported": "node tools/verify-unity-scaffold.mjs --mode=exported",
-    "verify:wechat": "npm --prefix browser run build:wechat"
+    "verify:wechat": "npm --prefix browser run build:wechat && node tools/verify-unity-scaffold.mjs --mode=scaffold"
   }
 }
