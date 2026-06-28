@@ -316,8 +316,15 @@ class WeChatCityGame {
     this.drawBackground();
     this.drawGrid();
     this.drawTopBar();
-    this.drawSidePanel();
-    this.drawManagementPanel();
+    const singlePanel = this.useSinglePanelLayout();
+    if (!singlePanel || this.selectedTool === 'inspect') {
+      this.drawSidePanel();
+    }
+    if (!singlePanel || this.selectedTool !== 'inspect') {
+      this.drawManagementPanel();
+    } else {
+      this.actionButtons.length = 0;
+    }
     this.drawToolBar();
     this.drawStatus();
   }
@@ -553,8 +560,8 @@ class WeChatCityGame {
     const m = this.sim.metrics;
     const inspection = this.selectedTile ? this.sim.getTileInspection(this.selectedTile.pos.x, this.selectedTile.pos.y) : null;
     const x = 12;
-    const panelHeight = 250;
-    const y = this.height - panelHeight - 18;
+    const panelHeight = this.infoPanelHeight();
+    const y = this.useTopAnchoredPanels() ? 54 : this.height - panelHeight - 18;
     const width = 238;
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, panelHeight, 6);
@@ -589,14 +596,12 @@ class WeChatCityGame {
       this.compactText(`提醒: ${m.alertDigest}`, 28),
     ];
 
-    lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 16));
+    const lineHeight = panelHeight < 235 ? 13 : 16;
+    lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 10 + index * lineHeight));
   }
 
   private drawManagementPanel(): void {
-    const x = this.width - 262;
-    const y = 54;
-    const width = 250;
-    const height = 450;
+    const { x, y, width, height, compact } = this.managementPanelRect();
     this.layoutActionButtons();
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, height, 6);
@@ -613,9 +618,16 @@ class WeChatCityGame {
     const policyPreviewLine = this.policyPreview
       ? this.compactText(`${this.policyPreview.summary}: ${this.policyPreview.deltas.slice(0, 3).join(' ')}`, 30)
       : '政策: 点按钮查看影响';
-    const insightLines = this.sim.getInsightStack(4).slice(0, 3)
+    const insightLines = this.sim.getInsightStack(4).slice(0, compact ? 1 : 3)
       .map((insight) => this.compactText(`${insight.label}: ${insight.text}`, 30));
-    const lines = [
+    const lines = compact ? [
+      this.compactText(`仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()} ${this.materialLine()}`, 30),
+      this.compactText(`工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()} ${production}`, 30),
+      firstOrder ? this.compactText(`订单: ${firstOrder.title} +$${firstOrder.rewardCash}`, 30) : '订单: 暂无',
+      firstOrder ? this.compactText(`需求: ${this.formatCost(firstOrder.required)}`, 30) : policyPreviewLine,
+      ...insightLines,
+      objective ? this.compactText(`目标: ${objective.title} +$${objective.rewardCash}`, 30) : '目标: 阶段目标已完成',
+    ] : [
       this.compactText(`仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()}  ${this.materialLine()}`, 30),
       this.compactText(`工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`, 30),
       firstOrder ? this.compactText(`订单: ${firstOrder.title} +$${firstOrder.rewardCash}`, 30) : '订单: 暂无',
@@ -627,7 +639,7 @@ class WeChatCityGame {
       objective ? this.compactText(`建议: ${objective.advice}`, 30) : '建议: 继续优化服务和路网',
     ];
 
-    lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 17));
+    lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 10 + index * (compact ? 14 : 17)));
 
     this.actionButtons.forEach((button) => {
       const locked = Boolean(button.lockedMessage);
@@ -644,7 +656,7 @@ class WeChatCityGame {
       this.ctx.font = '12px sans-serif';
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(button.label, button.x + button.width / 2, button.y + button.height / 2);
+      this.ctx.fillText(this.fitTextToWidth(button.label, button.width - 6), button.x + button.width / 2, button.y + button.height / 2);
       this.ctx.textAlign = 'left';
     });
   }
@@ -672,10 +684,69 @@ class WeChatCityGame {
     });
   }
 
+  private toolbarTop(): number {
+    return this.height - 48;
+  }
+
+  private isShortViewport(): boolean {
+    return this.height < 520;
+  }
+
+  private useSinglePanelLayout(): boolean {
+    return this.width < 640;
+  }
+
+  private useTopAnchoredPanels(): boolean {
+    return this.isShortViewport() || this.useSinglePanelLayout();
+  }
+
+  private infoPanelHeight(): number {
+    if (!this.useTopAnchoredPanels()) return 250;
+    return Math.min(250, Math.max(190, this.toolbarTop() - 64));
+  }
+
+  private managementPanelRect(): { x: number; y: number; width: number; height: number; compact: boolean } {
+    const y = 54;
+    const width = 250;
+    const compact = this.isShortViewport();
+    const height = compact
+      ? Math.max(190, this.toolbarTop() - y - 10)
+      : 450;
+    return {
+      x: this.width - width - 12,
+      y,
+      width,
+      height,
+      compact,
+    };
+  }
+
   private drawStatus(): void {
-    const width = Math.min(280, Math.max(170, this.statusText.length * 12));
-    const x = this.width - width - 12;
-    const y = this.height - 48;
+    const shortViewport = this.isShortViewport();
+    const singlePanel = this.useSinglePanelLayout();
+    const betweenPanels = shortViewport && !singlePanel;
+    const statusSlotX = betweenPanels ? 258 : 12;
+    const statusSlotWidth = betweenPanels
+      ? Math.max(110, this.managementPanelRect().x - statusSlotX - 8)
+      : 0;
+    const singlePanelStatusWidth = shortViewport && singlePanel
+      ? Math.max(110, this.selectedTool !== 'inspect'
+        ? this.managementPanelRect().x - 24
+        : this.width - 12 - 238 - 24)
+      : 0;
+    const width = betweenPanels
+      ? Math.min(statusSlotWidth, Math.max(110, this.statusText.length * 10))
+      : shortViewport && singlePanel
+        ? Math.min(singlePanelStatusWidth, Math.max(110, this.statusText.length * 10))
+      : Math.min(280, Math.max(170, this.statusText.length * 12));
+    const x = betweenPanels
+      ? statusSlotX + (statusSlotWidth - width) / 2
+      : shortViewport && singlePanel && this.selectedTool !== 'inspect'
+        ? 12
+        : this.width - width - 12;
+    const y = shortViewport || singlePanel
+      ? Math.max(44, this.toolbarTop() - 38)
+      : this.toolbarTop();
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, 34, 6);
     this.ctx.fill();
@@ -693,7 +764,7 @@ class WeChatCityGame {
     const buttonWidth = Math.min(66, Math.max(22, availableWidth / TOOLS.length));
     const totalWidth = buttonWidth * TOOLS.length + (TOOLS.length - 1) * gap;
     let x = Math.max(4, (this.width - totalWidth) / 2);
-    const y = this.height - 48;
+    const y = this.toolbarTop();
     for (const tool of TOOLS) {
       this.buttons.push({ tool, label: TOOL_LABELS[tool], x, y, width: buttonWidth, height: 34 });
       x += buttonWidth + gap;
@@ -702,23 +773,30 @@ class WeChatCityGame {
 
   private layoutActionButtons(): void {
     this.actionButtons.length = 0;
-    const x = this.width - 250;
-    const width = 48;
-    const gap = 6;
+    const panel = this.managementPanelRect();
+    const x = panel.x + (panel.compact ? 8 : 12);
+    const usableWidth = panel.width - (panel.compact ? 16 : 24);
+    const width = panel.compact ? Math.floor((usableWidth - 8) / 3) : 48;
+    const gap = panel.compact ? 4 : 6;
+    const rowHeight = panel.compact ? 23 : 28;
+    const rowGap = panel.compact ? 3 : 8;
     const unlockState = this.sim.getUnlockState();
-    const timeY = 250;
+    const timeY = panel.compact
+      ? panel.y + panel.height - (rowHeight * 6 + rowGap * 5) - 8
+      : 250;
+    const timeWidth = panel.compact ? Math.floor((usableWidth - gap * 3) / 4) : 56;
     ([0, 1, 2, 4] as CityTimeScale[]).forEach((timeScale, index) => {
       this.actionButtons.push({
         kind: 'timeScale',
         timeScale,
         label: TIME_SCALE_LABELS[timeScale],
-        x: x + index * 62,
+        x: x + index * (timeWidth + gap),
         y: timeY,
-        width: 56,
-        height: 28,
+        width: timeWidth,
+        height: rowHeight,
       });
     });
-    const productionY = timeY + 36;
+    const productionY = timeY + rowHeight + rowGap;
     (Object.keys(MATERIAL_LABELS) as MaterialId[]).forEach((materialId, index) => {
       const unlockEntry = unlockState.materials[materialId];
       this.actionButtons.push({
@@ -729,63 +807,72 @@ class WeChatCityGame {
         x: x + index * (width + gap),
         y: productionY,
         width,
-        height: 28,
+        height: rowHeight,
       });
     });
+    const orderY = productionY + rowHeight + rowGap;
+    const orderWidth = panel.compact ? Math.floor((usableWidth - gap * 2) * 0.28) : 74;
+    const upgradeWidth = panel.compact ? Math.floor((usableWidth - gap * 2) * 0.38) : 86;
+    const roadWidth = usableWidth - gap * 2 - orderWidth - upgradeWidth;
     this.actionButtons.push({
       kind: 'fulfillOrder',
       orderId: this.sim.orders[0]?.id,
       label: '交付',
       x,
-      y: productionY + 36,
-      width: 74,
-      height: 28,
+      y: orderY,
+      width: orderWidth,
+      height: rowHeight,
     });
     const residentialUpgrade = unlockState.actions[this.selectedResidentialUpgradeAction()];
     this.actionButtons.push({
       kind: 'upgrade',
       label: '升级住宅' + this.lockSuffix(residentialUpgrade),
       lockedMessage: residentialUpgrade.unlocked ? undefined : this.lockedMessage(residentialUpgrade.label, residentialUpgrade.unlockLevel),
-      x: x + 82,
-      y: productionY + 36,
-      width: 86,
-      height: 28,
+      x: x + orderWidth + gap,
+      y: orderY,
+      width: upgradeWidth,
+      height: rowHeight,
     });
     const roadUpgrade = unlockState.actions.roadUpgrade;
     this.actionButtons.push({
       kind: 'upgradeRoad',
       label: '升道路' + this.lockSuffix(roadUpgrade),
       lockedMessage: roadUpgrade.unlocked ? undefined : this.lockedMessage(roadUpgrade.label, roadUpgrade.unlockLevel),
-      x: x + 176,
-      y: productionY + 36,
-      width: 66,
-      height: 28,
+      x: x + orderWidth + gap + upgradeWidth + gap,
+      y: orderY,
+      width: roadWidth,
+      height: rowHeight,
     });
-    const taxY = productionY + 72;
+    const taxY = orderY + rowHeight + rowGap;
+    const taxWidth = panel.compact ? Math.floor((usableWidth - gap * 2) / 3) : 56;
     ([CityTaxLevel.Low, CityTaxLevel.Normal, CityTaxLevel.High] as CityTaxLevel[]).forEach((taxLevel, index) => {
       this.actionButtons.push({
         kind: 'tax',
         taxLevel,
         label: TAX_LABELS[taxLevel],
-        x: x + index * 62,
+        x: x + index * (taxWidth + gap),
         y: taxY,
-        width: 56,
-        height: 28,
+        width: taxWidth,
+        height: rowHeight,
       });
     });
-    const policyY = taxY + 36;
+    const policyY = taxY + rowHeight + rowGap;
+    const policyColumns = panel.compact ? 5 : 3;
+    const policyWidth = panel.compact ? Math.floor((usableWidth - gap * (policyColumns - 1)) / policyColumns) : 74;
+    const policyHeight = panel.compact ? 22 : 24;
+    const policyRowGap = panel.compact ? 2 : 6;
     this.sim.getPolicyStates().forEach((policyState, index) => {
-      const column = index % 3;
-      const row = Math.floor(index / 3);
+      const column = index % policyColumns;
+      const row = Math.floor(index / policyColumns);
       this.actionButtons.push({
         kind: 'policy',
         policy: policyState.policy,
         selected: policyState.enabled,
         label: policyState.shortLabel,
-        x: x + column * 82,
-        y: policyY + row * 30,
-        width: 74,
-        height: 24,
+        x: x + column * (policyWidth + gap),
+        y: policyY + row * (policyHeight + policyRowGap),
+        width: policyWidth,
+        height: policyHeight,
       });
     });
   }
