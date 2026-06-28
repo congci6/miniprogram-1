@@ -952,6 +952,31 @@ function assertNoForbiddenRuntimeMarkers() {
   }
 }
 
+function assertNoForbiddenWechatCanvasRuntimeMarkers() {
+  const forbiddenMarkers = [
+    'UNITY_BUILD_PENDING',
+    'Unity build pending',
+    'document',
+    'Phaser',
+    'Worker',
+    'SharedArrayBuffer',
+    'webgl2',
+    'createImageBitmap',
+    'window.',
+  ];
+  const files = [
+    'browser/src/wechat/main.ts',
+    'miniprogram/game.js',
+  ];
+
+  for (const file of files) {
+    const source = readFileSync(file, 'utf8');
+    for (const marker of forbiddenMarkers) {
+      assert(!source.includes(marker), `Forbidden WeChat Canvas runtime marker "${marker}" found in ${file}`);
+    }
+  }
+}
+
 function assertNoBrokenCSharpStrings(file) {
   const source = readFileSync(file, 'utf8');
   assert(!source.includes('\uFFFD'), `C# file contains replacement characters: ${file}`);
@@ -1017,6 +1042,7 @@ for (const file of walkFiles('unity/Assets', '.cs')) {
 }
 
 assertNoForbiddenRuntimeMarkers();
+assertNoForbiddenWechatCanvasRuntimeMarkers();
 
 const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
 assert(!packageJson.dependencies, 'Root package.json must not declare TypeScript runtime dependencies.');
