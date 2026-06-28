@@ -752,8 +752,9 @@ class WeChatCityGame {
     this.ctx.fill();
     this.ctx.fillStyle = '#f2d479';
     this.ctx.font = '12px sans-serif';
+    this.ctx.textAlign = 'left';
     this.ctx.textBaseline = 'middle';
-    this.ctx.fillText(this.statusText, x + 10, y + 17);
+    this.ctx.fillText(this.fitTextToWidth(this.statusText, width - 20), x + 10, y + 17);
   }
 
   private layoutTools(): void {
