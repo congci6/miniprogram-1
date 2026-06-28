@@ -67,6 +67,7 @@ interface RiskForecast {
 
 interface MonthlyBudget {
   income: number;
+  tourismIncome: number;
   roadCost: number;
   zoningCost: number;
   populationCost: number;
@@ -75,6 +76,12 @@ interface MonthlyBudget {
   policyBacklogCost: number;
   expenses: number;
   net: number;
+}
+
+interface TourismEconomy {
+  attractiveness: number;
+  visitors: number;
+  tourismIncome: number;
 }
 
 interface PolicyEffect {
@@ -512,6 +519,16 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
       && simulation.metrics.educationCoverage >= 50
       && simulation.metrics.landValue >= 55,
   },
+  {
+    id: 'city-attraction',
+    title: '形成游客经济',
+    description: '把服务、核心区和环境品质转化为游客收入',
+    rewardCash: 1240,
+    rewardExperience: 145,
+    isMet: (simulation) => simulation.metrics.attractiveness >= 55
+      && simulation.metrics.visitors >= 55
+      && simulation.metrics.tourismIncome >= 40,
+  },
 ];
 
 const ZONE_COST = 120;
@@ -752,6 +769,9 @@ export class CitySimulation {
       developmentQualityDriver: '等待已开发建筑成形',
       developmentQualityAction: '保持接路、服务和缓冲',
       landValue: 30,
+      attractiveness: 0,
+      visitors: 0,
+      tourismIncome: 0,
       rentPressure: 0, housingCapacity: 0, buildingCount: 0, mixedUseBuildings: 0, officeBuildings: 0, officeJobs: 0,
       unlockedBuildingIds: ['community_park'],
       alerts: [],
@@ -1146,6 +1166,12 @@ export class CitySimulation {
         priority: this.metrics.economicSpecializationScore >= 35 ? 520 + this.metrics.economicSpecializationScore : 0,
       },
       {
+        id: 'tourism',
+        label: '游客',
+        text: `吸引${this.metrics.attractiveness}/客${this.metrics.visitors}: 日收$${this.metrics.tourismIncome}`,
+        priority: this.metrics.attractiveness >= 55 || this.metrics.tourismIncome >= 40 ? 515 + this.metrics.attractiveness : 0,
+      },
+      {
         id: 'demand',
         label: '需求',
         text: `${this.metrics.demandFocus}${this.metrics.demandUrgency}: ${this.metrics.demandAction}`,
@@ -1362,7 +1388,19 @@ export class CitySimulation {
     const accidentRisk = this.clampPercent(10 + congestion * 0.35 + stats.roads * 0.5 - roadCoverage * 0.08 + policyEffect.accidentRisk);
     const stormwaterResilience = this.clampPercent(28 + parkCoverage * 0.22 + walkability * 0.08 - pollution * 0.1 + policyEffect.stormwaterResilience);
     const floodRisk = this.clampPercent(50 + stats.developedZoneTiles * 1.8 - stormwaterResilience * 0.7 + policyEffect.floodRisk);
-    const budget = this.estimateMonthlyBudgetForPolicies(stats, pollution, policies);
+    const landValue = Math.max(10, Math.min(100, 35 + roadCoverage * 0.22 + parkCoverage * 0.12 - pollution * 0.2 - congestion * 0.15));
+    const tourism = this.calculateTourismEconomy(stats, {
+      landValue,
+      roadCoverage,
+      serviceCoverage,
+      parkCoverage,
+      walkability,
+      congestion,
+      pollution,
+      parkingPressure,
+      floodRisk,
+    });
+    const budget = this.estimateMonthlyBudgetForPolicies(stats, pollution, policies, tourism.tourismIncome);
     return {
       monthlyNet: budget.net,
       congestion,
@@ -1767,6 +1805,12 @@ export class CitySimulation {
         if (this.metrics.educationCoverage < NATURAL_OFFICE_DISTRICT_REQUIREMENT.minEducationCoverage) return '补学校覆盖成熟商业片区。';
         if (this.metrics.landValue < NATURAL_OFFICE_DISTRICT_REQUIREMENT.minLandValue) return '补道路、公园和服务，提高核心地价。';
         return '让成熟商业贴近住宅和学校，等待办公区自然成长。';
+      case 'city-attraction':
+        if (stats.serviceBuildings < 2) return '补公园、诊所或学校，形成可游览的服务节点。';
+        if (this.metrics.parkCoverage < 50) return '提高公园覆盖，先把城市吸引力拉起来。';
+        if (this.metrics.attractiveness < 55) return '降低拥堵污染，并培育混合核心或办公片区。';
+        if (this.metrics.tourismIncome < 40) return '保持核心区品质，等待游客收入稳定增长。';
+        return '游客经济已成形，继续补核心服务和交通容量。';
       default:
         return '继续扩建城市并优化路网。';
     }
@@ -1871,11 +1915,22 @@ export class CitySimulation {
     const accidentRisk = this.clampPercent(10 + congestion * 0.35 + stats.roads * 0.5 - roadCoverage * 0.08 + policyEffect.accidentRisk);
     const stormwaterResilience = this.clampPercent(28 + parkCoverage * 0.22 + walkability * 0.08 - pollution * 0.1 + policyEffect.stormwaterResilience);
     const floodRisk = this.clampPercent(50 + stats.developedZoneTiles * 1.8 - stormwaterResilience * 0.7 + policyEffect.floodRisk);
+    const tourism = this.calculateTourismEconomy(stats, {
+      landValue,
+      roadCoverage,
+      serviceCoverage,
+      parkCoverage,
+      walkability,
+      congestion,
+      pollution,
+      parkingPressure,
+      floodRisk,
+    });
     const bufferAdvisor = this.createFunctionalBufferAdvisor(stats);
     const landUseAdvisor = this.createLandUseEfficiencyAdvisor(stats, roadCoverage);
     const qualityAdvisor = this.createDevelopmentQualityAdvisor(stats, serviceGapPressure, bufferAdvisor);
     const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure, policyEffect, bufferAdvisor.pressure, qualityAdvisor.score);
-    const budget = this.estimateMonthlyBudget(stats, pollution);
+    const budget = this.estimateMonthlyBudget(stats, pollution, tourism.tourismIncome);
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
     const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
     const commuteAdvisor = this.createCommuteCorridorAdvisor(stats, roadCoverage, congestion, demand, roadAdvisor);
@@ -1925,6 +1980,9 @@ export class CitySimulation {
     this.metrics.taxLevel = this.taxLevel;
     this.metrics.taxRatePercent = taxRatePercent;
     this.metrics.landValue = landValue;
+    this.metrics.attractiveness = tourism.attractiveness;
+    this.metrics.visitors = tourism.visitors;
+    this.metrics.tourismIncome = tourism.tourismIncome;
     this.metrics.residentialDemand = demand.residential;
     this.metrics.commercialDemand = demand.commercial;
     this.metrics.industrialDemand = demand.industrial;
@@ -1934,7 +1992,7 @@ export class CitySimulation {
     this.metrics.demandAction = demand.action;
     this.metrics.demandUrgency = demand.urgency;
     this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 + administration.efficiency * 0.04 + qualityAdvisor.score * 0.04 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - bufferAdvisor.pressure * 0.12 - qualityAdvisor.pressure * 0.08 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
-    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 + bufferAdvisor.score * 0.03 + landUseAdvisor.score * 0.04 + qualityAdvisor.score * 0.06 - pollution * 0.2 - floodRisk * 0.06 - bufferAdvisor.pressure * 0.08 - landUseAdvisor.pressure * 0.06 - qualityAdvisor.pressure * 0.06)));
+    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 + bufferAdvisor.score * 0.03 + landUseAdvisor.score * 0.04 + qualityAdvisor.score * 0.06 + tourism.attractiveness * 0.04 - pollution * 0.2 - floodRisk * 0.06 - bufferAdvisor.pressure * 0.08 - landUseAdvisor.pressure * 0.06 - qualityAdvisor.pressure * 0.06)));
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
@@ -2515,15 +2573,61 @@ export class CitySimulation {
     return 10;
   }
 
+  private calculateTourismEconomy(
+    stats: GridStats,
+    context: {
+      landValue: number;
+      roadCoverage: number;
+      serviceCoverage: number;
+      parkCoverage: number;
+      walkability: number;
+      congestion: number;
+      pollution: number;
+      parkingPressure: number;
+      floodRisk: number;
+    },
+  ): TourismEconomy {
+    const landmarkPull = Math.min(
+      34,
+      stats.serviceBuildings * 4
+      + stats.mixedUseTiles * 8
+      + stats.officeTiles * 6
+      + Math.min(10, stats.upgradedRoads * 4),
+    );
+    const attractiveness = this.clampPercent(
+      16
+      + context.landValue * 0.22
+      + context.parkCoverage * 0.2
+      + context.serviceCoverage * 0.12
+      + context.roadCoverage * 0.1
+      + context.walkability * 0.12
+      + landmarkPull
+      - context.congestion * 0.18
+      - context.pollution * 0.16
+      - context.parkingPressure * 0.08
+      - context.floodRisk * 0.06,
+    );
+    const cityDraw = Math.max(0, this.metrics.population) * 0.16
+      + stats.jobs * 0.12
+      + stats.housingCapacity * 0.05
+      + stats.serviceBuildings * 8
+      + stats.mixedUseTiles * 18
+      + stats.officeTiles * 14;
+    const visitors = Math.max(0, Math.round(cityDraw * (attractiveness / 100)));
+    const spendPerVisitor = 0.55 + context.landValue * 0.006 + stats.mixedUseTiles * 0.04 + stats.officeTiles * 0.035;
+    const tourismIncome = Math.max(0, Math.round(visitors * spendPerVisitor));
+    return { attractiveness, visitors, tourismIncome };
+  }
+
   private estimateMonthlyCashFlow(stats: GridStats, pollution: number): number {
     return this.estimateMonthlyBudget(stats, pollution).net;
   }
 
-  private estimateMonthlyBudget(stats: GridStats, pollution: number): MonthlyBudget {
-    return this.estimateMonthlyBudgetForPolicies(stats, pollution, this.activePolicies);
+  private estimateMonthlyBudget(stats: GridStats, pollution: number, tourismIncome = this.metrics.tourismIncome): MonthlyBudget {
+    return this.estimateMonthlyBudgetForPolicies(stats, pollution, this.activePolicies, tourismIncome);
   }
 
-  private estimateMonthlyBudgetForPolicies(stats: GridStats, pollution: number, policies: CityPolicy[]): MonthlyBudget {
+  private estimateMonthlyBudgetForPolicies(stats: GridStats, pollution: number, policies: CityPolicy[], tourismIncome = this.metrics.tourismIncome): MonthlyBudget {
     const policyEffect = this.getPolicyEffect(policies);
     const policyBacklogCost = Math.round(this.calculateAdministration(stats, policies).policyBacklog * 1.4);
     const policyNet = policyEffect.monthlyNet - policyBacklogCost;
@@ -2533,8 +2637,8 @@ export class CitySimulation {
     const populationCost = Math.floor(this.metrics.population * 0.6);
     const pollutionCost = Math.floor(pollution);
     const expenses = roadCost + zoningCost + populationCost + pollutionCost + Math.max(0, -policyNet);
-    const totalIncome = income + Math.max(0, policyNet);
-    return { income: totalIncome, roadCost, zoningCost, populationCost, pollutionCost, policyNet, policyBacklogCost, expenses, net: totalIncome - expenses };
+    const totalIncome = income + tourismIncome + Math.max(0, policyNet);
+    return { income: totalIncome, tourismIncome, roadCost, zoningCost, populationCost, pollutionCost, policyNet, policyBacklogCost, expenses, net: totalIncome - expenses };
   }
 
   private createBudgetBreakdownAdvisor(budget: MonthlyBudget): BudgetBreakdownAdvisor {
@@ -2559,7 +2663,7 @@ export class CitySimulation {
       return {
         stress,
         focus: '稳定',
-        driver: `月净现金+$${budget.net}`,
+        driver: budget.tourismIncome > 0 ? `月净+$${budget.net}/游客+$${budget.tourismIncome}` : `月净现金+$${budget.net}`,
         action: '保持现金缓冲',
       };
     }
@@ -2636,6 +2740,14 @@ export class CitySimulation {
       - congestion * 0.12
       - pollution * 0.1,
     );
+    const tourismScore = this.clampPercent(
+      this.metrics.attractiveness * 0.46
+      + Math.min(26, this.metrics.visitors * 0.28)
+      + Math.min(18, this.metrics.tourismIncome * 0.18)
+      + Math.min(16, stats.mixedUseTiles * 6 + stats.serviceBuildings * 3)
+      - congestion * 0.12
+      - pollution * 0.12,
+    );
 
     const candidates = [
       {
@@ -2679,6 +2791,12 @@ export class CitySimulation {
         focus: '办公创新',
         driver: `办公${stats.officeTiles} 教育${Math.round(this.metrics.educationCoverage)}%`,
         action: stats.officeTiles > 0 ? '保持教育覆盖并补核心服务' : '让成熟商业贴近学校和住宅',
+      },
+      {
+        score: tourismScore,
+        focus: '游客经济',
+        driver: `吸引${this.metrics.attractiveness} 游客${this.metrics.visitors}`,
+        action: this.metrics.attractiveness >= 55 ? '保持核心服务并压低拥堵污染' : '补公园服务并培育混合核心',
       },
       {
         score: logisticsScore,

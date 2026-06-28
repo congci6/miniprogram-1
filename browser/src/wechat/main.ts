@@ -547,7 +547,7 @@ class WeChatCityGame {
       this.compactText(`品质: ${m.developmentQualityScore}/低${m.lowQualityBuildingCount} ${m.developmentQualityAction}`, 28),
       this.compactText(`住/混/办: ${m.housingCapacity.toLocaleString()}/${m.mixedUseBuildings}/${m.officeBuildings} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}`, 28),
       this.compactText(`道路/通勤: ${Math.round(m.roadCoverage)}% ${m.roadHierarchyFocus}${m.roadHierarchyPressure}/${m.commuteCorridorFocus}${m.commuteCorridorScore}`, 28),
-      this.compactText(`需求/经济: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}/${m.economicSpecializationFocus}${m.economicSpecializationScore}`, 28),
+      this.compactText(`需求/经济: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}/${m.economicSpecializationFocus}${m.economicSpecializationScore} 游${m.visitors}`, 28),
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),
       inspection
         ? `地块: ${inspection.title}`
