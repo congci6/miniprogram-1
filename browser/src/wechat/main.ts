@@ -413,6 +413,9 @@ class WeChatCityGame {
       case ZoneType.Industrial:
         this.drawIndustrialMarker(x, y);
         return;
+      case ZoneType.MixedUse:
+        this.drawMixedUseMarker(x, y);
+        return;
       default:
     }
   }
@@ -482,6 +485,22 @@ class WeChatCityGame {
     this.ctx.fillRect(x + 8, y - 19, 4, 17);
   }
 
+  private drawMixedUseMarker(x: number, y: number): void {
+    this.ctx.fillStyle = '#f2ddb0';
+    this.ctx.fillRect(x - 9, y - 17, 8, 15);
+    this.ctx.fillStyle = '#d8e7ff';
+    this.ctx.fillRect(x, y - 14, 9, 12);
+    this.ctx.fillStyle = '#c85a44';
+    this.ctx.beginPath();
+    this.ctx.moveTo(x - 11, y - 17);
+    this.ctx.lineTo(x, y - 17);
+    this.ctx.lineTo(x - 5, y - 23);
+    this.ctx.closePath();
+    this.ctx.fill();
+    this.ctx.fillStyle = '#3f6fa9';
+    this.ctx.fillRect(x + 2, y - 10, 4, 2);
+  }
+
   private drawTopBar(): void {
     const m = this.sim.metrics;
     this.ctx.fillStyle = 'rgba(18,24,28,0.9)';
@@ -511,7 +530,7 @@ class WeChatCityGame {
       this.compactText(`缓冲: ${m.functionalBufferScore}/冲${m.landUseConflictCount} ${m.functionalBufferAction}`, 28),
       this.compactText(`用地: ${m.landUseEfficiencyScore}/空${m.vacantZoneTiles} ${m.landUseEfficiencyAction}`, 28),
       this.compactText(`品质: ${m.developmentQualityScore}/低${m.lowQualityBuildingCount} ${m.developmentQualityAction}`, 28),
-      this.compactText(`住房/升级: ${m.housingCapacity.toLocaleString()} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}/候${m.buildingUpgradeReadyCount}`, 28),
+      this.compactText(`住房/混合: ${m.housingCapacity.toLocaleString()}/混${m.mixedUseBuildings} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}`, 28),
       this.compactText(`道路/通勤: ${Math.round(m.roadCoverage)}% ${m.roadHierarchyFocus}${m.roadHierarchyPressure}/${m.commuteCorridorFocus}${m.commuteCorridorScore}`, 28),
       this.compactText(`需求/经济: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}/${m.economicSpecializationFocus}${m.economicSpecializationScore}`, 28),
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),

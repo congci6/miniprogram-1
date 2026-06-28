@@ -35,6 +35,7 @@ interface GridStats {
   plannedResidentialTiles: number;
   industrialTiles: number;
   residentialTiles: number;
+  mixedUseTiles: number;
   upgradedResidentialTiles: number;
   serviceBuildings: number;
   parkCoveredResidentialTiles: number;
@@ -260,6 +261,7 @@ const ZONE_STATS: Partial<Record<ZoneType, { housing: number; jobs: number; poll
   [ZoneType.Residential]: { housing: 24, jobs: 0, pollution: 1, label: '住宅区' },
   [ZoneType.Commercial]: { housing: 0, jobs: 18, pollution: 2, label: '商业区' },
   [ZoneType.Industrial]: { housing: 0, jobs: 28, pollution: 7, label: '工业区' },
+  [ZoneType.MixedUse]: { housing: 30, jobs: 14, pollution: 1, label: '混合区' },
 };
 
 const INSPECTION_ZONE_LABELS: Record<ZoneType, string> = {
@@ -487,6 +489,16 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
       && simulation.metrics.developmentQualityScore >= 70
       && simulation.metrics.lowQualityBuildingCount <= 1,
   },
+  {
+    id: 'mixed-core',
+    title: '形成混合核心',
+    description: '让成熟核心区同时提供住房与岗位',
+    rewardCash: 980,
+    rewardExperience: 120,
+    isMet: (simulation, stats) => stats.mixedUseTiles >= 1
+      && simulation.metrics.landValue >= 55
+      && simulation.metrics.developmentQualityScore >= 70,
+  },
 ];
 
 const ZONE_COST = 120;
@@ -504,6 +516,14 @@ const RESIDENTIAL_UPGRADE_UNLOCK_LEVELS: Record<number, number> = {
 const NATURAL_RESIDENTIAL_UPGRADE_REQUIREMENTS: Record<number, { minAgeDays: number; minLandValue: number; minQuality: number; minRentPressure: number; minDemand: number }> = {
   2: { minAgeDays: 10, minLandValue: 42, minQuality: 64, minRentPressure: 45, minDemand: 70 },
   3: { minAgeDays: 24, minLandValue: 55, minQuality: 72, minRentPressure: 55, minDemand: 76 },
+};
+const NATURAL_MIXED_USE_CORE_REQUIREMENT = {
+  minAgeDays: 12,
+  minCityLevel: 3,
+  minLandValue: 55,
+  minQuality: 72,
+  minResidentialDemand: 62,
+  minCommercialDemand: 62,
 };
 const OFFLINE_MS_PER_DAY = 60_000;
 const MAX_OFFLINE_DAYS = 72;
@@ -711,7 +731,7 @@ export class CitySimulation {
       developmentQualityDriver: '等待已开发建筑成形',
       developmentQualityAction: '保持接路、服务和缓冲',
       landValue: 30,
-      rentPressure: 0, housingCapacity: 0, buildingCount: 0,
+      rentPressure: 0, housingCapacity: 0, buildingCount: 0, mixedUseBuildings: 0,
       unlockedBuildingIds: ['community_park'],
       alerts: [],
       alertDigest: '城市运行平稳',
@@ -729,6 +749,10 @@ export class CitySimulation {
       this.ageBuildings();
       this.computeMetrics();
       if (this.processZoneDevelopment()) {
+        changed = true;
+        this.computeMetrics();
+      }
+      if (this.processNaturalMixedUseCore()) {
         changed = true;
         this.computeMetrics();
       }
@@ -1440,6 +1464,43 @@ export class CitySimulation {
     return false;
   }
 
+  private processNaturalMixedUseCore(): boolean {
+    if (!this.isLevelUnlocked(NATURAL_MIXED_USE_CORE_REQUIREMENT.minCityLevel)) return false;
+    if (this.metrics.landValue < NATURAL_MIXED_USE_CORE_REQUIREMENT.minLandValue) return false;
+    if (
+      this.metrics.residentialDemand < NATURAL_MIXED_USE_CORE_REQUIREMENT.minResidentialDemand
+      || this.metrics.commercialDemand < NATURAL_MIXED_USE_CORE_REQUIREMENT.minCommercialDemand
+    ) return false;
+
+    const serviceSources = this.collectServiceSources();
+    let best: { x: number; y: number; score: number } | null = null;
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const tile = this.grid.getTile(x, y);
+        if (!tile || tile.zone !== ZoneType.Residential || !tile.buildingId) continue;
+        if ((tile.buildingAgeDays ?? 0) < NATURAL_MIXED_USE_CORE_REQUIREMENT.minAgeDays) continue;
+        if (!tile.roadId && !this.hasAdjacentRoad(x, y)) continue;
+        if (!this.hasNearbyDevelopedZone(x, y, ZoneType.Commercial, 2)) continue;
+        if (this.getTileBufferRisk(x, y) > 20) continue;
+
+        const quality = this.calculateTileDevelopmentQuality(x, y, serviceSources);
+        if (quality < NATURAL_MIXED_USE_CORE_REQUIREMENT.minQuality) continue;
+        const score = quality * 1.2
+          + (tile.buildingAgeDays ?? 0) * 0.45
+          + this.metrics.landValue * 0.35
+          + this.metrics.commercialDemand * 0.3
+          + this.metrics.residentialDemand * 0.2;
+        if (!best || score > best.score) best = { x, y, score };
+      }
+    }
+
+    if (!best) return false;
+    this.grid.setZone(best.x, best.y, ZoneType.MixedUse);
+    this.grid.setBuilding(best.x, best.y, 'mixed_use_l1');
+    this.pushCityEvent(`住宅商业自然融合为混合核心 (${best.x},${best.y})`);
+    return true;
+  }
+
   private processNaturalResidentialUpgrades(): boolean {
     const serviceSources = this.collectServiceSources();
     let best: { x: number; y: number; nextLevel: number; score: number } | null = null;
@@ -1633,6 +1694,12 @@ export class CitySimulation {
         if (stats.developedZoneTiles < 4) return '先形成至少 4 个已开发建筑。';
         if (this.metrics.developmentQualityScore < 70 || this.metrics.lowQualityBuildingCount > 1) return this.metrics.developmentQualityAction;
         return '片区品质达标，等待目标结算。';
+      case 'mixed-core':
+        if (!this.isLevelUnlocked(NATURAL_MIXED_USE_CORE_REQUIREMENT.minCityLevel)) return `先升到 Lv${NATURAL_MIXED_USE_CORE_REQUIREMENT.minCityLevel} 解锁核心混合成长。`;
+        if (stats.mixedUseTiles > 0) return '混合核心已成形，继续保持地价和片区品质。';
+        if (this.metrics.landValue < NATURAL_MIXED_USE_CORE_REQUIREMENT.minLandValue) return '补道路、公园和服务，提升核心区地价。';
+        if (this.metrics.commercialDemand < NATURAL_MIXED_USE_CORE_REQUIREMENT.minCommercialDemand) return '在住宅旁补商业需求，让核心区具备客流。';
+        return '让成熟住宅贴近商业和服务，等待自然混合成长。';
       default:
         return '继续扩建城市并优化路网。';
     }
@@ -1750,6 +1817,7 @@ export class CitySimulation {
 
     this.metrics.housingCapacity = stats.housingCapacity;
     this.metrics.buildingCount = stats.developedZoneTiles + stats.roads + stats.serviceBuildings;
+    this.metrics.mixedUseBuildings = stats.mixedUseTiles;
     this.metrics.roadCoverage = roadCoverage;
     this.metrics.congestion = congestion;
     this.metrics.pollution = pollution;
@@ -1997,6 +2065,7 @@ export class CitySimulation {
       plannedResidentialTiles: 0,
       industrialTiles: 0,
       residentialTiles: 0,
+      mixedUseTiles: 0,
       upgradedResidentialTiles: 0,
       serviceBuildings: 0,
       parkCoveredResidentialTiles: 0,
@@ -2052,6 +2121,12 @@ export class CitySimulation {
             stats.housingCapacity += zoneStats.housing;
             stats.jobs += zoneStats.jobs;
             if (tile.zone === ZoneType.Commercial) sensitiveTiles.push({ x, y, kind: '商业' });
+            if (tile.zone === ZoneType.MixedUse) {
+              stats.mixedUseTiles++;
+              stats.residentialTiles++;
+              residentialTiles.push({ x, y });
+              sensitiveTiles.push({ x, y, kind: '住宅' });
+            }
           }
           if (tile.zone === ZoneType.Industrial) {
             stats.industrialTiles++;
@@ -2117,6 +2192,13 @@ export class CitySimulation {
       if (this.hasNearbyDevelopedZone(x, y, ZoneType.Residential, 3)) score += 10;
       if (this.hasNearbyDevelopedZone(x, y, ZoneType.Industrial, 2)) score -= 6;
       score -= bufferRisk * 0.12;
+    } else if (tile.zone === ZoneType.MixedUse) {
+      const pos = { x, y };
+      if (this.isResidentialCoveredBy(pos, serviceSources, 'parkValue')) score += 6;
+      if (this.isResidentialCoveredBy(pos, serviceSources, 'healthValue')) score += 5;
+      if (this.isResidentialCoveredBy(pos, serviceSources, 'educationValue')) score += 5;
+      if (this.hasNearbyDevelopedZone(x, y, ZoneType.Commercial, 2)) score += 8;
+      score -= bufferRisk * 0.18;
     } else if (tile.zone === ZoneType.Industrial) {
       if (bufferRisk <= 0) score += 8;
       score -= bufferRisk * 0.2;
@@ -2457,6 +2539,13 @@ export class CitySimulation {
       + (demand.industrial >= 55 ? 10 : 0)
       - (roadCoverage < 45 ? 14 : 0),
     );
+    const mixedCoreScore = this.clampPercent(
+      demand.commercial * 0.36
+      + demand.residential * 0.24
+      + landValue * 0.24
+      + Math.min(18, stats.mixedUseTiles * 10)
+      - congestion * 0.12,
+    );
 
     const candidates = [
       {
@@ -2488,6 +2577,12 @@ export class CitySimulation {
         focus: '邻里商业',
         driver: `商业需求${demand.commercial} 地价${Math.round(landValue)}`,
         action: congestion > 35 ? '升级商业动线瓶颈' : '在住宅旁补商业区',
+      },
+      {
+        score: mixedCoreScore,
+        focus: '混合核心',
+        driver: `混合${stats.mixedUseTiles} 地价${Math.round(landValue)}`,
+        action: stats.mixedUseTiles > 0 ? '保持核心服务并补周边商业' : '让成熟住宅贴近商业和服务',
       },
       {
         score: logisticsScore,
@@ -3202,6 +3297,7 @@ export class CitySimulation {
     if (residentialLevel > 0) return `住宅 ${residentialLevel} 级`;
     if (buildingId === 'commercial_l1') return '商业建筑';
     if (buildingId === 'industrial_l1') return '工业建筑';
+    if (buildingId === 'mixed_use_l1') return '混合建筑';
     return buildingId;
   }
 
@@ -3239,6 +3335,7 @@ export class CitySimulation {
 
   private sensitiveKindForTile(zone: ZoneType, service?: ServiceBuildingDefinition): '住宅' | '商业' | '服务' | null {
     if (zone === ZoneType.Residential) return '住宅';
+    if (zone === ZoneType.MixedUse) return '住宅';
     if (zone === ZoneType.Commercial) return '商业';
     if (service && service.parkValue <= 0) return '服务';
     return null;
@@ -3295,6 +3392,10 @@ export class CitySimulation {
       const bufferRisk = this.getTileBufferRisk(x, y);
       return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}${qualityPart}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
     }
+    if (tile.zone === ZoneType.MixedUse) {
+      const bufferRisk = this.getTileBufferRisk(x, y);
+      return { label: '混合', value: `住${zoneStats.housing} 岗${zoneStats.jobs}${qualityPart}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
+    }
     return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}${qualityPart}` };
   }
 
@@ -3340,6 +3441,7 @@ export class CitySimulation {
     }
 
     if (tile.zone === ZoneType.Commercial) return '商业提供岗位，靠近住宅与道路客流更稳';
+    if (tile.zone === ZoneType.MixedUse) return '混合核心同时提供住房和岗位，继续保持服务覆盖与道路容量';
     if (tile.zone === ZoneType.Industrial) {
       const bufferRisk = this.getTileBufferRisk(x, y);
       return bufferRisk > 35 ? '工业贴近住宅或服务，建议迁到边缘或补公园缓冲' : '工业提供岗位和材料基础，注意污染远离住宅';
