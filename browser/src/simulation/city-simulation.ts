@@ -501,6 +501,10 @@ const RESIDENTIAL_UPGRADE_UNLOCK_LEVELS: Record<number, number> = {
   2: 2,
   3: 3,
 };
+const NATURAL_RESIDENTIAL_UPGRADE_REQUIREMENTS: Record<number, { minAgeDays: number; minLandValue: number; minQuality: number; minRentPressure: number; minDemand: number }> = {
+  2: { minAgeDays: 10, minLandValue: 42, minQuality: 64, minRentPressure: 45, minDemand: 70 },
+  3: { minAgeDays: 24, minLandValue: 55, minQuality: 72, minRentPressure: 55, minDemand: 76 },
+};
 const OFFLINE_MS_PER_DAY = 60_000;
 const MAX_OFFLINE_DAYS = 72;
 const ROAD_CAPACITY: Record<string, number> = {
@@ -725,6 +729,10 @@ export class CitySimulation {
       this.ageBuildings();
       this.computeMetrics();
       if (this.processZoneDevelopment()) {
+        changed = true;
+        this.computeMetrics();
+      }
+      if (this.processNaturalResidentialUpgrades()) {
         changed = true;
         this.computeMetrics();
       }
@@ -1430,6 +1438,44 @@ export class CitySimulation {
     }
 
     return false;
+  }
+
+  private processNaturalResidentialUpgrades(): boolean {
+    const serviceSources = this.collectServiceSources();
+    let best: { x: number; y: number; nextLevel: number; score: number } | null = null;
+
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const tile = this.grid.getTile(x, y);
+        if (!tile || tile.zone !== ZoneType.Residential) continue;
+        const currentLevel = this.getResidentialLevel(tile);
+        if (currentLevel <= 0 || currentLevel >= MAX_RESIDENTIAL_LEVEL) continue;
+
+        const nextLevel = currentLevel + 1;
+        const requirement = NATURAL_RESIDENTIAL_UPGRADE_REQUIREMENTS[nextLevel];
+        if (!requirement) continue;
+        if (!this.isLevelUnlocked(RESIDENTIAL_UPGRADE_UNLOCK_LEVELS[nextLevel] ?? 1)) continue;
+        if ((tile.buildingAgeDays ?? 0) < requirement.minAgeDays) continue;
+        if (!tile.roadId && !this.hasAdjacentRoad(x, y)) continue;
+        if (this.metrics.landValue < requirement.minLandValue) continue;
+        if (this.metrics.rentPressure < requirement.minRentPressure && this.metrics.residentialDemand < requirement.minDemand) continue;
+
+        const quality = this.calculateTileDevelopmentQuality(x, y, serviceSources);
+        if (quality < requirement.minQuality) continue;
+
+        const score = quality * 1.2
+          + (tile.buildingAgeDays ?? 0) * 0.5
+          + this.metrics.rentPressure
+          + this.metrics.residentialDemand * 0.25
+          + this.metrics.landValue * 0.2;
+        if (!best || score > best.score) best = { x, y, nextLevel, score };
+      }
+    }
+
+    if (!best) return false;
+    this.grid.setBuilding(best.x, best.y, `residential_l${best.nextLevel}`);
+    this.pushCityEvent(`住宅自然成长到${best.nextLevel}级 (${best.x},${best.y})`);
+    return true;
   }
 
   private findVacantDevelopableZone(zone: ZoneType): { x: number; y: number } | null {
