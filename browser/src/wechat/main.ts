@@ -413,6 +413,9 @@ class WeChatCityGame {
       case ZoneType.Industrial:
         this.drawIndustrialMarker(x, y);
         return;
+      case ZoneType.Office:
+        this.drawOfficeMarker(x, y);
+        return;
       case ZoneType.MixedUse:
         this.drawMixedUseMarker(x, y);
         return;
@@ -501,6 +504,18 @@ class WeChatCityGame {
     this.ctx.fillRect(x + 2, y - 10, 4, 2);
   }
 
+  private drawOfficeMarker(x: number, y: number): void {
+    this.ctx.fillStyle = '#d7ccff';
+    this.ctx.fillRect(x - 8, y - 22, 7, 20);
+    this.ctx.fillStyle = '#b9a7f5';
+    this.ctx.fillRect(x, y - 18, 8, 16);
+    this.ctx.fillStyle = '#5b4aa0';
+    for (let row = 0; row < 3; row++) {
+      this.ctx.fillRect(x - 6, y - 18 + row * 5, 3, 2);
+      this.ctx.fillRect(x + 2, y - 15 + row * 5, 3, 2);
+    }
+  }
+
   private drawTopBar(): void {
     const m = this.sim.metrics;
     this.ctx.fillStyle = 'rgba(18,24,28,0.9)';
@@ -530,7 +545,7 @@ class WeChatCityGame {
       this.compactText(`缓冲: ${m.functionalBufferScore}/冲${m.landUseConflictCount} ${m.functionalBufferAction}`, 28),
       this.compactText(`用地: ${m.landUseEfficiencyScore}/空${m.vacantZoneTiles} ${m.landUseEfficiencyAction}`, 28),
       this.compactText(`品质: ${m.developmentQualityScore}/低${m.lowQualityBuildingCount} ${m.developmentQualityAction}`, 28),
-      this.compactText(`住房/混合: ${m.housingCapacity.toLocaleString()}/混${m.mixedUseBuildings} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}`, 28),
+      this.compactText(`住/混/办: ${m.housingCapacity.toLocaleString()}/${m.mixedUseBuildings}/${m.officeBuildings} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}`, 28),
       this.compactText(`道路/通勤: ${Math.round(m.roadCoverage)}% ${m.roadHierarchyFocus}${m.roadHierarchyPressure}/${m.commuteCorridorFocus}${m.commuteCorridorScore}`, 28),
       this.compactText(`需求/经济: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}/${m.economicSpecializationFocus}${m.economicSpecializationScore}`, 28),
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),

@@ -111,6 +111,9 @@ export class IsometricRenderer {
       case ZoneType.Industrial:
         this.drawIndustrialMarker(wx, wy);
         return;
+      case ZoneType.Office:
+        this.drawOfficeMarker(wx, wy);
+        return;
       case ZoneType.MixedUse:
         this.drawMixedUseMarker(wx, wy);
         return;
@@ -174,6 +177,18 @@ export class IsometricRenderer {
     this.gfx.fillTriangle(wx - 12, wy - 18, wx, wy - 18, wx - 6, wy - 24);
     this.gfx.fillStyle(0x3f6fa9, 0.75);
     this.gfx.fillRect(wx + 3, wy - 11, 4, 2);
+  }
+
+  private drawOfficeMarker(wx: number, wy: number): void {
+    this.gfx.fillStyle(0xd7ccff, 0.94);
+    this.gfx.fillRect(wx - 9, wy - 23, 8, 21);
+    this.gfx.fillStyle(0xb9a7f5, 0.94);
+    this.gfx.fillRect(wx, wy - 19, 9, 17);
+    this.gfx.fillStyle(0x5b4aa0, 0.72);
+    for (let row = 0; row < 3; row++) {
+      this.gfx.fillRect(wx - 7, wy - 19 + row * 5, 3, 2);
+      this.gfx.fillRect(wx + 3, wy - 16 + row * 5, 3, 2);
+    }
   }
 
   private getResidentialLevel(buildingId: string): number {
