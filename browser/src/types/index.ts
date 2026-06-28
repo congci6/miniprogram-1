@@ -1,4 +1,4 @@
-// ===== Basic type definitions migrated from Unity PocketCity.Core =====
+// ===== Shared simulation type definitions =====
 export enum BuildingCategory {
   Residential, Commercial, Industrial, Utility, Service,
   Decoration, Park, Office, MixedUse,
