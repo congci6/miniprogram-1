@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "build:wechat": "npm --prefix browser run build:wechat",
-    "verify": "npm --prefix browser run build:wechat && node tools/verify-unity-scaffold.mjs --mode=scaffold",
+    "smoke:wechat": "node tools/smoke-wechat-runtime.mjs",
+    "verify": "npm --prefix browser run build:wechat && node tools/verify-unity-scaffold.mjs --mode=scaffold && npm run smoke:wechat",
     "verify:scaffold": "node tools/verify-unity-scaffold.mjs --mode=scaffold",
     "verify:exported": "node tools/verify-unity-scaffold.mjs --mode=exported",
-    "verify:wechat": "npm --prefix browser run build:wechat && node tools/verify-unity-scaffold.mjs --mode=scaffold"
+    "verify:wechat": "npm --prefix browser run build:wechat && node tools/verify-unity-scaffold.mjs --mode=scaffold && npm run smoke:wechat"
   }
 }
