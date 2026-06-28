@@ -121,6 +121,70 @@ function tap(x, y) {
   touchCallbacks.end({ changedTouches: [touch] });
 }
 
+function drawNextFrame(label) {
+  assert(frameCallbacks.length > 0, `Runtime should schedule ${label}.`);
+  textDraws.length = 0;
+  const frame = frameCallbacks.shift();
+  frame(Date.now() + 16);
+}
+
+function latestStorageKey() {
+  const key = Array.from(storage.keys()).at(-1);
+  assert(key, 'Runtime should have a saved city snapshot key.');
+  return key;
+}
+
+function latestSnapshot() {
+  const snapshot = Array.from(storage.values()).at(-1);
+  assert(snapshot, 'Runtime should have a saved city snapshot.');
+  return snapshot;
+}
+
+function cloneSnapshot(snapshot) {
+  return JSON.parse(JSON.stringify(snapshot));
+}
+
+function restoreSnapshotThroughStorage(snapshot) {
+  const copy = cloneSnapshot(snapshot);
+  copy.savedAtMs = Date.now();
+  storage.set(latestStorageKey(), copy);
+  lifecycleCallbacks.show();
+}
+
+function unlockLevelTwo(snapshot) {
+  snapshot.metrics.cash = Math.max(snapshot.metrics.cash ?? 0, 50000);
+  snapshot.metrics.cityExperience = Math.max(snapshot.metrics.cityExperience ?? 0, 100);
+}
+
+function setMaterials(snapshot, materials) {
+  snapshot.materials = {
+    wood: materials.wood ?? 0,
+    metal: materials.metal ?? 0,
+    plastic: materials.plastic ?? 0,
+  };
+}
+
+function findSavedTile(snapshot, x, y) {
+  return snapshot.tiles.find((tile) => tile.x === x && tile.y === y);
+}
+
+function upsertSavedTile(snapshot, nextTile) {
+  const existing = findSavedTile(snapshot, nextTile.x, nextTile.y);
+  const tile = {
+    zone: 0,
+    roadId: '',
+    buildingId: '',
+    buildingAgeDays: 0,
+    ...existing,
+    ...nextTile,
+  };
+  if (existing) {
+    Object.assign(existing, tile);
+  } else {
+    snapshot.tiles.push(tile);
+  }
+}
+
 function findCenteredTextInBand(minY, maxY, index, minimumCount, label) {
   const textCenters = textDraws
     .filter((draw) => draw.textAlign === 'center' && draw.y > minY && draw.y < maxY)
@@ -132,6 +196,18 @@ function findCenteredTextInBand(minY, maxY, index, minimumCount, label) {
 
 function findToolbarCenter(index) {
   return findCenteredTextInBand(320, 365, index, 9, 'all toolbar labels');
+}
+
+function findTimeScaleCenter(index) {
+  return findCenteredTextInBand(155, 180, index, 4, 'time scale controls');
+}
+
+function findProductionCenter(index) {
+  return findCenteredTextInBand(180, 205, index, 3, 'production controls');
+}
+
+function findOrderActionCenter(index) {
+  return findCenteredTextInBand(210, 235, index, 3, 'order and upgrade controls');
 }
 
 function screenForTile(x, y) {
@@ -157,8 +233,7 @@ assert(lifecycleCallbacks.hide && lifecycleCallbacks.show, 'Runtime should regis
 assert(canvas.width === 1624 && canvas.height === 750, `Runtime should size the canvas by DPR; got ${canvas.width}x${canvas.height}.`);
 assert(frameCallbacks.length > 0, 'Runtime should schedule an animation frame.');
 
-const firstFrame = frameCallbacks.shift();
-firstFrame(Date.now() + 16);
+drawNextFrame('the first frame');
 assert(calls.fillRect > 0, 'Runtime should draw filled canvas shapes during the first frame.');
 assert(calls.fillText > 0, 'Runtime should draw UI text during the first frame.');
 assert(calls.requestAnimationFrame >= 2, 'Runtime should schedule the next frame after drawing.');
@@ -177,6 +252,86 @@ assert(
   'Runtime should apply the selected road tool to the tapped map tile.',
 );
 
+drawNextFrame('management controls after road placement');
+
+const fastTimeButtonCenter = findTimeScaleCenter(3);
+const savesBeforeTimeScale = calls.setStorageSync;
+tap(fastTimeButtonCenter.x, fastTimeButtonCenter.y);
+assert(calls.setStorageSync > savesBeforeTimeScale, 'Runtime should save after changing time scale.');
+
+const woodProductionButtonCenter = findProductionCenter(0);
+const savesBeforeProduction = calls.setStorageSync;
+tap(woodProductionButtonCenter.x, woodProductionButtonCenter.y);
+assert(calls.setStorageSync > savesBeforeProduction, 'Runtime should save after starting production.');
+const snapshotAfterProduction = latestSnapshot();
+assert(
+  snapshotAfterProduction?.productionQueue?.some((job) => job.materialId === 'wood' && job.remainingDays > 0),
+  'Runtime should start a wood production job through the management panel.',
+);
+
+const orderReadySnapshot = cloneSnapshot(snapshotAfterProduction);
+unlockLevelTwo(orderReadySnapshot);
+const firstOrder = orderReadySnapshot.orders?.[0];
+assert(firstOrder, 'Runtime should keep at least one city order available.');
+setMaterials(orderReadySnapshot, firstOrder.required);
+const completedOrdersBefore = orderReadySnapshot.completedOrders;
+restoreSnapshotThroughStorage(orderReadySnapshot);
+drawNextFrame('order-ready management controls');
+const fulfillOrderButtonCenter = findOrderActionCenter(0);
+const savesBeforeOrder = calls.setStorageSync;
+tap(fulfillOrderButtonCenter.x, fulfillOrderButtonCenter.y);
+assert(calls.setStorageSync > savesBeforeOrder, 'Runtime should save after fulfilling an order.');
+const snapshotAfterOrder = latestSnapshot();
+assert(snapshotAfterOrder.completedOrders === completedOrdersBefore + 1, 'Runtime should fulfill an order through the management panel.');
+assert(
+  Object.values(snapshotAfterOrder.materials).every((count) => count === 0),
+  'Runtime should consume the required materials when fulfilling an order.',
+);
+
+const roadUpgradeReadySnapshot = cloneSnapshot(snapshotAfterOrder);
+unlockLevelTwo(roadUpgradeReadySnapshot);
+upsertSavedTile(roadUpgradeReadySnapshot, { x: 12, y: 9, zone: 0, roadId: 'local', buildingId: '', buildingAgeDays: 0 });
+restoreSnapshotThroughStorage(roadUpgradeReadySnapshot);
+drawNextFrame('road-upgrade-ready management controls');
+tap(mapCenter.x, mapCenter.y);
+drawNextFrame('selected road management controls');
+const roadUpgradeButtonCenter = findOrderActionCenter(2);
+const savesBeforeRoadUpgrade = calls.setStorageSync;
+tap(roadUpgradeButtonCenter.x, roadUpgradeButtonCenter.y);
+assert(calls.setStorageSync > savesBeforeRoadUpgrade, 'Runtime should save after upgrading a road.');
+const snapshotAfterRoadUpgrade = latestSnapshot();
+assert(
+  findSavedTile(snapshotAfterRoadUpgrade, 12, 9)?.roadId === 'arterial',
+  'Runtime should upgrade the selected road through the management panel.',
+);
+
+const residentialUpgradeReadySnapshot = cloneSnapshot(snapshotAfterRoadUpgrade);
+unlockLevelTwo(residentialUpgradeReadySnapshot);
+setMaterials(residentialUpgradeReadySnapshot, { wood: 2, metal: 1 });
+upsertSavedTile(residentialUpgradeReadySnapshot, { x: 12, y: 9, zone: 0, roadId: 'arterial', buildingId: '', buildingAgeDays: 0 });
+upsertSavedTile(residentialUpgradeReadySnapshot, { x: 13, y: 9, zone: 1, roadId: '', buildingId: 'residential_l1', buildingAgeDays: 12 });
+restoreSnapshotThroughStorage(residentialUpgradeReadySnapshot);
+drawNextFrame('residential-upgrade-ready controls');
+const inspectToolCenter = findToolbarCenter(0);
+const residentialTileCenter = screenForTile(13, 9);
+tap(inspectToolCenter.x, inspectToolCenter.y);
+tap(residentialTileCenter.x, residentialTileCenter.y);
+drawNextFrame('selected residential management controls');
+const residentialUpgradeButtonCenter = findOrderActionCenter(1);
+const savesBeforeResidentialUpgrade = calls.setStorageSync;
+tap(residentialUpgradeButtonCenter.x, residentialUpgradeButtonCenter.y);
+assert(calls.setStorageSync > savesBeforeResidentialUpgrade, 'Runtime should save after upgrading a residential tile.');
+const snapshotAfterResidentialUpgrade = latestSnapshot();
+assert(
+  findSavedTile(snapshotAfterResidentialUpgrade, 13, 9)?.buildingId === 'residential_l2',
+  'Runtime should upgrade the selected residential tile through the management panel.',
+);
+assert(
+  snapshotAfterResidentialUpgrade.materials.wood === 0 && snapshotAfterResidentialUpgrade.materials.metal === 0,
+  'Runtime should consume residential upgrade materials.',
+);
+
+drawNextFrame('management controls before tax and policy actions');
 const highTaxButtonCenter = findCenteredTextInBand(235, 260, 2, 3, 'tax controls');
 const savesBeforeTax = calls.setStorageSync;
 tap(highTaxButtonCenter.x, highTaxButtonCenter.y);
