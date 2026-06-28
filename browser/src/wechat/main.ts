@@ -15,7 +15,7 @@ interface WeChatRuntime {
   onShow?(callback: () => void): void;
   setStorageSync?(key: string, value: unknown): void;
   getStorageSync?(key: string): unknown;
-  vibrateShort?(options?: { type?: 'light' | 'medium' | 'heavy' }): void;
+  vibrateShort?(options?: { type?: FeedbackType }): void;
 }
 
 interface WeChatCanvas {
@@ -53,6 +53,24 @@ interface ActionButton {
   timeScale?: CityTimeScale;
   policy?: CityPolicy;
   selected?: boolean;
+}
+
+type FeedbackType = 'light' | 'medium' | 'heavy';
+
+interface SaveOptions {
+  announce?: boolean;
+  feedback?: FeedbackType;
+}
+
+interface RestoreOptions {
+  announceMissing?: boolean;
+  feedback?: FeedbackType;
+  resave?: boolean;
+}
+
+interface StorageReadResult {
+  status: 'ok' | 'unavailable' | 'failed';
+  value?: unknown;
 }
 
 const RUNTIME_MARKER = 'NON_UNITY_WECHAT_CANVAS_RUNTIME';
@@ -148,9 +166,9 @@ class WeChatCityGame {
     this.runtime.onTouchStart((event) => this.handleTouch(event, true));
     this.runtime.onTouchMove((event) => this.handleTouch(event, false));
     this.runtime.onTouchEnd((event) => this.handleTouchEnd(event));
-    this.runtime.onHide?.(() => this.save());
+    this.runtime.onHide?.(() => this.save({ announce: true, feedback: 'medium' }));
     this.runtime.onShow?.(() => {
-      if (!this.restore()) this.statusText = '城市已恢复，继续规划';
+      this.restore({ announceMissing: true, feedback: 'light' });
     });
   }
 
@@ -249,7 +267,7 @@ class WeChatCityGame {
     this.selectedTile = this.sim.grid.getTile(tilePos.x, tilePos.y) ?? null;
     this.statusText = result.message;
     if (result.changed) {
-      this.vibrate('light');
+      this.vibrate('medium');
       this.save();
     }
   }
@@ -754,7 +772,7 @@ class WeChatCityGame {
                   : { changed: false, message: button.kind === 'upgradeRoad' ? '请先选择道路地块' : '请先选择住宅地块' };
     this.statusText = result.message;
     if (result.changed) {
-      this.vibrate('light');
+      this.vibrate('medium');
       this.save();
     }
   }
@@ -827,17 +845,59 @@ class WeChatCityGame {
     this.ctx.closePath();
   }
 
-  private restore(): boolean {
-    const data = this.runtime.getStorageSync?.(SAVE_KEY);
-    if (!this.isSaveData(data)) return false;
+  private restore(options: RestoreOptions = {}): boolean {
+    const { announceMissing = false, feedback, resave = true } = options;
+    const read = this.readSave();
+    if (read.status === 'unavailable') {
+      if (announceMissing) this.statusText = '本地存档不可用';
+      if (feedback) this.vibrate(feedback);
+      return false;
+    }
+    if (read.status === 'failed') {
+      if (announceMissing) this.statusText = '读取存档失败，继续规划';
+      if (feedback) this.vibrate('heavy');
+      return false;
+    }
+    if (!this.isSaveData(read.value)) {
+      if (announceMissing) this.statusText = '城市继续运行';
+      if (feedback) this.vibrate(feedback);
+      return false;
+    }
+    const data = read.value;
     const offline = this.sim.restoreSnapshot(data);
     this.statusText = this.formatOfflineMessage(offline) || '已读取本地城市存档';
-    this.save();
+    if (feedback) this.vibrate(feedback);
+    if (resave) this.save();
     return true;
   }
 
-  private save(): void {
-    this.runtime.setStorageSync?.(SAVE_KEY, this.sim.createSnapshot());
+  private save(options: SaveOptions = {}): boolean {
+    const { announce = false, feedback } = options;
+    if (!this.runtime.setStorageSync) {
+      if (announce) this.statusText = '本地存档不可用';
+      if (feedback) this.vibrate('heavy');
+      return false;
+    }
+
+    try {
+      this.runtime.setStorageSync(SAVE_KEY, this.sim.createSnapshot());
+      if (announce) this.statusText = '城市已安全保存';
+      if (feedback) this.vibrate(feedback);
+      return true;
+    } catch {
+      if (announce) this.statusText = '保存失败，继续规划';
+      if (feedback) this.vibrate('heavy');
+      return false;
+    }
+  }
+
+  private readSave(): StorageReadResult {
+    if (!this.runtime.getStorageSync) return { status: 'unavailable' };
+    try {
+      return { status: 'ok', value: this.runtime.getStorageSync(SAVE_KEY) };
+    } catch {
+      return { status: 'failed' };
+    }
   }
 
   private isSaveData(value: unknown): value is CitySimulationSaveData {
@@ -878,8 +938,12 @@ class WeChatCityGame {
       .join('、');
   }
 
-  private vibrate(type: 'light' | 'medium' | 'heavy'): void {
-    this.runtime.vibrateShort?.({ type });
+  private vibrate(type: FeedbackType): void {
+    try {
+      this.runtime.vibrateShort?.({ type });
+    } catch {
+      // Tactile feedback is optional on some WeChat devices and simulators.
+    }
   }
 }
 
