@@ -540,6 +540,9 @@ class WeChatCityGame {
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, panelHeight, 6);
     this.ctx.fill();
+    this.ctx.fillStyle = '#dbe6df';
+    this.ctx.font = '12px sans-serif';
+    this.ctx.textBaseline = 'top';
 
     const lines = [
       this.compactText(`等级: Lv${m.cityLevel} ${m.cityLevelName} 税${m.taxRatePercent}% 行${m.administrationEfficiency}/${m.administrationUtilization}%`, 28),
@@ -552,7 +555,7 @@ class WeChatCityGame {
       this.compactText(`经济: ${m.economicSpecializationFocus}${m.economicSpecializationScore} 游${m.visitors} 才${m.workforceSkill}/缺${m.laborShortage}`, 28),
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),
       inspection
-        ? `地块: ${inspection.title}`
+        ? this.compactText(`地块: ${inspection.title}`, 28)
         : '地块: 未选择',
       inspection
         ? this.compactText(`图层: ${inspection.overlayLabel} ${inspection.overlayValue}`, 28)
@@ -567,9 +570,6 @@ class WeChatCityGame {
       this.compactText(`提醒: ${m.alertDigest}`, 28),
     ];
 
-    this.ctx.fillStyle = '#dbe6df';
-    this.ctx.font = '12px sans-serif';
-    this.ctx.textBaseline = 'top';
     lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 16));
   }
 
@@ -582,6 +582,9 @@ class WeChatCityGame {
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
     this.roundRect(x, y, width, height, 6);
     this.ctx.fill();
+    this.ctx.fillStyle = '#dbe6df';
+    this.ctx.font = '12px sans-serif';
+    this.ctx.textBaseline = 'top';
 
     const firstOrder = this.sim.orders[0];
     const production = this.sim.productionQueue.length
@@ -594,20 +597,17 @@ class WeChatCityGame {
     const insightLines = this.sim.getInsightStack(4).slice(0, 3)
       .map((insight) => this.compactText(`${insight.label}: ${insight.text}`, 30));
     const lines = [
-      `仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()}  ${this.materialLine()}`,
-      `工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`,
-      firstOrder ? `订单: ${firstOrder.title} +$${firstOrder.rewardCash}` : '订单: 暂无',
-      firstOrder ? `需求: ${this.formatCost(firstOrder.required)}` : '需求: 无',
+      this.compactText(`仓库 ${this.sim.getStorageUsed()}/${this.sim.getStorageCapacity()}  ${this.materialLine()}`, 30),
+      this.compactText(`工厂 ${this.sim.productionQueue.length}/${this.sim.getProductionSlots()}  ${production}`, 30),
+      firstOrder ? this.compactText(`订单: ${firstOrder.title} +$${firstOrder.rewardCash}`, 30) : '订单: 暂无',
+      firstOrder ? this.compactText(`需求: ${this.formatCost(firstOrder.required)}`, 30) : '需求: 无',
       policyPreviewLine,
       ...insightLines,
-      objective ? `目标: ${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}` : '目标: 阶段目标已完成',
-      objective ? objective.description : '继续扩建城市并优化路网',
-      objective ? `建议: ${objective.advice}` : '建议: 继续优化服务和路网',
+      objective ? this.compactText(`目标: ${objective.title} +$${objective.rewardCash} 经验+${objective.rewardExperience}`, 30) : '目标: 阶段目标已完成',
+      objective ? this.compactText(objective.description, 30) : '继续扩建城市并优化路网',
+      objective ? this.compactText(`建议: ${objective.advice}`, 30) : '建议: 继续优化服务和路网',
     ];
 
-    this.ctx.fillStyle = '#dbe6df';
-    this.ctx.font = '12px sans-serif';
-    this.ctx.textBaseline = 'top';
     lines.forEach((line, index) => this.ctx.fillText(line, x + 12, y + 12 + index * 17));
 
     this.actionButtons.forEach((button) => {
@@ -966,7 +966,24 @@ class WeChatCityGame {
   }
 
   private compactText(text: string, maxChars: number): string {
-    return text.length > maxChars ? `${text.slice(0, Math.max(0, maxChars - 3))}...` : text;
+    const ellipsis = '...';
+    const maxWidth = maxChars * 7.5;
+    if (text.length <= maxChars && this.ctx.measureText(text).width <= maxWidth) return text;
+    if (this.ctx.measureText(text).width <= maxWidth) return text;
+
+    let low = 0;
+    let high = text.length;
+    while (low < high) {
+      const mid = Math.ceil((low + high) / 2);
+      const candidate = `${text.slice(0, mid)}${ellipsis}`;
+      if (this.ctx.measureText(candidate).width <= maxWidth) {
+        low = mid;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return `${text.slice(0, low)}${ellipsis}`;
   }
 
   private formatCost(cost: MaterialCost): string {
