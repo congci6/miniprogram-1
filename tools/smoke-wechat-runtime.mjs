@@ -22,6 +22,7 @@ const calls = {
   requestAnimationFrame: 0,
   setStorageSync: 0,
   getStorageSync: 0,
+  vibrateShort: 0,
 };
 
 const context2d = {
@@ -93,7 +94,7 @@ const wx = {
     calls.getStorageSync += 1;
     return storage.get(key);
   },
-  vibrateShort() {},
+  vibrateShort() { calls.vibrateShort += 1; },
 };
 
 const sandbox = {
@@ -123,6 +124,19 @@ firstFrame(Date.now() + 16);
 assert(calls.fillRect > 0, 'Runtime should draw filled canvas shapes during the first frame.');
 assert(calls.fillText > 0, 'Runtime should draw UI text during the first frame.');
 assert(calls.requestAnimationFrame >= 2, 'Runtime should schedule the next frame after drawing.');
+
+const savesBeforeInteraction = calls.setStorageSync;
+const vibrationsBeforeInteraction = calls.vibrateShort;
+touchCallbacks.start({ touches: [{ clientX: 190, clientY: 344 }] });
+touchCallbacks.start({ touches: [{ clientX: 406, clientY: 75 }] });
+touchCallbacks.end({ changedTouches: [{ clientX: 406, clientY: 75 }] });
+assert(calls.vibrateShort > vibrationsBeforeInteraction, 'Runtime should vibrate after tool selection or placement.');
+assert(calls.setStorageSync > savesBeforeInteraction, 'Runtime should save after placing a road.');
+const snapshotAfterInteraction = Array.from(storage.values()).at(-1);
+assert(
+  snapshotAfterInteraction?.tiles?.some((tile) => tile.x === 12 && tile.y === 9 && tile.roadId === 'local'),
+  'Runtime should apply the selected road tool to the tapped map tile.',
+);
 
 lifecycleCallbacks.hide();
 assert(calls.setStorageSync > 0 && storage.size > 0, 'Runtime should save city state on hide.');
