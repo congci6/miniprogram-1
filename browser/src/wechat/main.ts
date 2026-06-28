@@ -500,16 +500,17 @@ class WeChatCityGame {
     const m = this.sim.metrics;
     const inspection = this.selectedTile ? this.sim.getTileInspection(this.selectedTile.pos.x, this.selectedTile.pos.y) : null;
     const x = 12;
-    const y = this.height - 236;
+    const y = this.height - 252;
     const width = 238;
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
-    this.roundRect(x, y, width, 218, 6);
+    this.roundRect(x, y, width, 234, 6);
     this.ctx.fill();
 
     const lines = [
       this.compactText(`等级: Lv${m.cityLevel} ${m.cityLevelName} 税${m.taxRatePercent}% 行${m.administrationEfficiency}/${m.administrationUtilization}%`, 28),
       this.compactText(`缓冲: ${m.functionalBufferScore}/冲${m.landUseConflictCount} ${m.functionalBufferAction}`, 28),
       this.compactText(`用地: ${m.landUseEfficiencyScore}/空${m.vacantZoneTiles} ${m.landUseEfficiencyAction}`, 28),
+      this.compactText(`品质: ${m.developmentQualityScore}/低${m.lowQualityBuildingCount} ${m.developmentQualityAction}`, 28),
       this.compactText(`住房/升级: ${m.housingCapacity.toLocaleString()} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}/候${m.buildingUpgradeReadyCount}`, 28),
       this.compactText(`道路/通勤: ${Math.round(m.roadCoverage)}% ${m.roadHierarchyFocus}${m.roadHierarchyPressure}/${m.commuteCorridorFocus}${m.commuteCorridorScore}`, 28),
       this.compactText(`需求/经济: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}/${m.economicSpecializationFocus}${m.economicSpecializationScore}`, 28),

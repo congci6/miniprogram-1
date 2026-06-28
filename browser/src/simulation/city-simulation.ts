@@ -27,6 +27,8 @@ interface GridStats {
   zonedTiles: number;
   developedZoneTiles: number;
   vacantZoneTiles: number;
+  developmentQualityScore: number;
+  lowQualityBuildingCount: number;
   housingCapacity: number;
   jobs: number;
   pollution: number;
@@ -126,6 +128,15 @@ interface LandUseEfficiencyAdvisor {
   action: string;
 }
 
+interface DevelopmentQualityAdvisor {
+  score: number;
+  pressure: number;
+  lowQualityBuildingCount: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
 interface PolicyDefinition {
   label: string;
   shortLabel: string;
@@ -215,6 +226,7 @@ interface TileSnapshot {
   zone: ZoneType;
   roadId: string;
   buildingId: string;
+  buildingAgeDays?: number;
 }
 
 export interface CitySimulationLegacySnapshot {
@@ -465,6 +477,16 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
       && simulation.metrics.vacantZoneTiles <= 3
       && simulation.metrics.landUseEfficiencyScore >= 70,
   },
+  {
+    id: 'quality-district',
+    title: '打造优质片区',
+    description: '让已开发建筑保持接路、服务和环境品质',
+    rewardCash: 920,
+    rewardExperience: 110,
+    isMet: (simulation, stats) => stats.developedZoneTiles >= 4
+      && simulation.metrics.developmentQualityScore >= 70
+      && simulation.metrics.lowQualityBuildingCount <= 1,
+  },
 ];
 
 const ZONE_COST = 120;
@@ -679,6 +701,11 @@ export class CitySimulation {
       landUseEfficiencyFocus: '起步',
       landUseEfficiencyDriver: '尚未形成分区压力',
       landUseEfficiencyAction: '先接路规划少量住宅',
+      developmentQualityScore: 100,
+      lowQualityBuildingCount: 0,
+      developmentQualityFocus: '起步',
+      developmentQualityDriver: '等待已开发建筑成形',
+      developmentQualityAction: '保持接路、服务和缓冲',
       landValue: 30,
       rentPressure: 0, housingCapacity: 0, buildingCount: 0,
       unlockedBuildingIds: ['community_park'],
@@ -695,6 +722,7 @@ export class CitySimulation {
       this.dayAccumulator -= 1;
       this.metrics.day++;
       if (this.processProductionDay()) changed = true;
+      this.ageBuildings();
       this.computeMetrics();
       if (this.processZoneDevelopment()) {
         changed = true;
@@ -1019,6 +1047,12 @@ export class CitySimulation {
         priority: this.metrics.landUseEfficiencyScore < 70 ? 625 + (100 - this.metrics.landUseEfficiencyScore) : 0,
       },
       {
+        id: 'development-quality',
+        label: '品质',
+        text: `${this.metrics.developmentQualityFocus}${this.metrics.developmentQualityScore}: ${this.metrics.developmentQualityAction}`,
+        priority: this.metrics.developmentQualityScore < 70 ? 623 + (100 - this.metrics.developmentQualityScore) : 0,
+      },
+      {
         id: 'road',
         label: '道路',
         text: `${this.metrics.roadHierarchyFocus}${this.metrics.roadHierarchyPressure}: ${this.metrics.roadHierarchyAction}`,
@@ -1156,7 +1190,7 @@ export class CitySimulation {
         const tile = this.grid.getTile(x, y);
         if (!tile) continue;
         if (tile.zone !== ZoneType.None || tile.roadId || tile.buildingId) {
-          tiles.push({ x, y, zone: tile.zone, roadId: tile.roadId, buildingId: tile.buildingId });
+          tiles.push({ x, y, zone: tile.zone, roadId: tile.roadId, buildingId: tile.buildingId, buildingAgeDays: tile.buildingAgeDays });
         }
       }
     }
@@ -1229,7 +1263,7 @@ export class CitySimulation {
       this.grid.setTerrain(tile.x, tile.y, TerrainType.Plain);
       this.grid.setZone(tile.x, tile.y, tile.zone);
       if (tile.roadId) this.grid.setRoad(tile.x, tile.y, tile.roadId);
-      if (tile.buildingId) this.grid.setBuilding(tile.x, tile.y, tile.buildingId);
+      if (tile.buildingId) this.grid.setBuilding(tile.x, tile.y, tile.buildingId, tile.buildingAgeDays ?? 0);
     }
 
     this.ensureOrders();
@@ -1353,6 +1387,15 @@ export class CitySimulation {
       changed = true;
     }
     return changed;
+  }
+
+  private ageBuildings(): void {
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const tile = this.grid.getTile(x, y);
+        if (tile?.buildingId) tile.buildingAgeDays++;
+      }
+    }
   }
 
   private processZoneDevelopment(): boolean {
@@ -1540,6 +1583,10 @@ export class CitySimulation {
         if (this.metrics.vacantZoneTiles > 3) return this.metrics.landUseEfficiencyAction;
         if (this.metrics.developedZoneRatio < 70) return '等待已接路分区自然开发，暂缓继续外扩。';
         return '用地效率达标，等待目标结算。';
+      case 'quality-district':
+        if (stats.developedZoneTiles < 4) return '先形成至少 4 个已开发建筑。';
+        if (this.metrics.developmentQualityScore < 70 || this.metrics.lowQualityBuildingCount > 1) return this.metrics.developmentQualityAction;
+        return '片区品质达标，等待目标结算。';
       default:
         return '继续扩建城市并优化路网。';
     }
@@ -1646,7 +1693,8 @@ export class CitySimulation {
     const floodRisk = this.clampPercent(50 + stats.developedZoneTiles * 1.8 - stormwaterResilience * 0.7 + policyEffect.floodRisk);
     const bufferAdvisor = this.createFunctionalBufferAdvisor(stats);
     const landUseAdvisor = this.createLandUseEfficiencyAdvisor(stats, roadCoverage);
-    const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure, policyEffect, bufferAdvisor.pressure);
+    const qualityAdvisor = this.createDevelopmentQualityAdvisor(stats, serviceGapPressure, bufferAdvisor);
+    const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure, policyEffect, bufferAdvisor.pressure, qualityAdvisor.score);
     const budget = this.estimateMonthlyBudget(stats, pollution);
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
     const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
@@ -1686,6 +1734,11 @@ export class CitySimulation {
     this.metrics.landUseEfficiencyFocus = landUseAdvisor.focus;
     this.metrics.landUseEfficiencyDriver = landUseAdvisor.driver;
     this.metrics.landUseEfficiencyAction = landUseAdvisor.action;
+    this.metrics.developmentQualityScore = qualityAdvisor.score;
+    this.metrics.lowQualityBuildingCount = qualityAdvisor.lowQualityBuildingCount;
+    this.metrics.developmentQualityFocus = qualityAdvisor.focus;
+    this.metrics.developmentQualityDriver = qualityAdvisor.driver;
+    this.metrics.developmentQualityAction = qualityAdvisor.action;
     this.metrics.taxLevel = this.taxLevel;
     this.metrics.taxRatePercent = taxRatePercent;
     this.metrics.landValue = landValue;
@@ -1697,8 +1750,8 @@ export class CitySimulation {
     this.metrics.demandDriver = demand.driver;
     this.metrics.demandAction = demand.action;
     this.metrics.demandUrgency = demand.urgency;
-    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 + administration.efficiency * 0.04 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - bufferAdvisor.pressure * 0.12 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
-    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 + bufferAdvisor.score * 0.03 + landUseAdvisor.score * 0.04 - pollution * 0.2 - floodRisk * 0.06 - bufferAdvisor.pressure * 0.08 - landUseAdvisor.pressure * 0.06)));
+    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 + administration.efficiency * 0.04 + qualityAdvisor.score * 0.04 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - bufferAdvisor.pressure * 0.12 - qualityAdvisor.pressure * 0.08 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
+    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 + bufferAdvisor.score * 0.03 + landUseAdvisor.score * 0.04 + qualityAdvisor.score * 0.06 - pollution * 0.2 - floodRisk * 0.06 - bufferAdvisor.pressure * 0.08 - landUseAdvisor.pressure * 0.06 - qualityAdvisor.pressure * 0.06)));
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
@@ -1718,8 +1771,9 @@ export class CitySimulation {
       upgradeAdvisor,
       bufferAdvisor,
       landUseAdvisor,
+      qualityAdvisor,
     );
-    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor, bufferAdvisor, landUseAdvisor);
+    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor, bufferAdvisor, landUseAdvisor, qualityAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
@@ -1774,15 +1828,17 @@ export class CitySimulation {
     taxPressure: number,
     policyEffect: PolicyEffect,
     landUseConflictPressure: number,
+    developmentQualityScore: number,
   ): DemandAnalysis {
     const population = this.metrics.population;
     const targetHousing = Math.max(72, Math.ceil(population * 1.15 + stats.jobs * 0.55 + 48));
     const housingGap = targetHousing - stats.housingCapacity;
     const jobGap = population * 0.45 - stats.jobs;
 
-    const residential = this.clampPercent(48 + housingGap * 0.35 + serviceCoverage * 0.08 + roadCoverage * 0.08 - pollution * 0.18 - congestion * 0.12 - landUseConflictPressure * 0.16 - taxPressure * 4 + policyEffect.residentialDemand);
-    const commercial = this.clampPercent(35 + population * 0.18 + landValue * 0.15 + roadCoverage * 0.1 - stats.jobs * 0.12 - congestion * 0.12 - landUseConflictPressure * 0.08 - taxPressure * 3 + policyEffect.commercialDemand);
-    const industrial = this.clampPercent(42 + Math.max(0, jobGap) * 0.8 + stats.residentialTiles * 5 - stats.industrialTiles * 14 + roadCoverage * 0.08 - pollution * 0.2 - landUseConflictPressure * 0.1 - taxPressure * 2 + policyEffect.industrialDemand);
+    const qualityDemand = (developmentQualityScore - 60) * 0.12;
+    const residential = this.clampPercent(48 + housingGap * 0.35 + serviceCoverage * 0.08 + roadCoverage * 0.08 + qualityDemand - pollution * 0.18 - congestion * 0.12 - landUseConflictPressure * 0.16 - taxPressure * 4 + policyEffect.residentialDemand);
+    const commercial = this.clampPercent(35 + population * 0.18 + landValue * 0.15 + roadCoverage * 0.1 + qualityDemand * 0.7 - stats.jobs * 0.12 - congestion * 0.12 - landUseConflictPressure * 0.08 - taxPressure * 3 + policyEffect.commercialDemand);
+    const industrial = this.clampPercent(42 + Math.max(0, jobGap) * 0.8 + stats.residentialTiles * 5 + qualityDemand * 0.35 - stats.industrialTiles * 14 + roadCoverage * 0.08 - pollution * 0.2 - landUseConflictPressure * 0.1 - taxPressure * 2 + policyEffect.industrialDemand);
     const advice = this.getDemandAdvice(residential, commercial, industrial);
     const top = [
       { key: 'residential', label: '住宅', value: residential },
@@ -1812,6 +1868,9 @@ export class CitySimulation {
       } else if (landUseConflictPressure > 30) {
         driver = '工业贴近住宅';
         action = '拉开工业距离或补公园缓冲';
+      } else if (developmentQualityScore < 55) {
+        driver = '片区品质偏低';
+        action = '补道路、服务并等待成熟';
       } else if (taxPressure > 0) {
         driver = '税率抑制迁入';
         action = '考虑降税恢复迁入';
@@ -1884,6 +1943,8 @@ export class CitySimulation {
       zonedTiles: 0,
       developedZoneTiles: 0,
       vacantZoneTiles: 0,
+      developmentQualityScore: 100,
+      lowQualityBuildingCount: 0,
       housingCapacity: 0,
       jobs: 0,
       pollution: 0,
@@ -1902,6 +1963,7 @@ export class CitySimulation {
     const industrialTiles: Array<{ x: number; y: number }> = [];
     const sensitiveTiles: Array<{ x: number; y: number; kind: '住宅' | '商业' | '服务' }> = [];
     const parkBuffers: Array<{ x: number; y: number }> = [];
+    const developedTiles: Array<{ x: number; y: number }> = [];
     const serviceSources: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }> = [];
     for (let y = 0; y < this.grid.height; y++) {
       for (let x = 0; x < this.grid.width; x++) {
@@ -1923,6 +1985,7 @@ export class CitySimulation {
           } else {
             sensitiveTiles.push({ x, y, kind: '服务' });
           }
+          developedTiles.push({ x, y });
         }
         const zoneStats = ZONE_STATS[tile.zone];
         if (zoneStats) {
@@ -1931,6 +1994,7 @@ export class CitySimulation {
           if (!tile.buildingId) continue;
 
           stats.developedZoneTiles++;
+          developedTiles.push({ x, y });
           stats.pollution += zoneStats.pollution;
           if (tile.zone === ZoneType.Residential) {
             stats.housingCapacity += RESIDENTIAL_CAPACITY_BY_LEVEL[this.getResidentialLevel(tile)] ?? 0;
@@ -1959,7 +2023,75 @@ export class CitySimulation {
     const conflicts = this.analyzeLandUseConflicts(industrialTiles, sensitiveTiles, parkBuffers);
     stats.landUseConflictPressure = conflicts.pressure;
     stats.landUseConflictCount = conflicts.count;
+    const quality = this.analyzeDevelopmentQuality(developedTiles, serviceSources);
+    stats.developmentQualityScore = quality.score;
+    stats.lowQualityBuildingCount = quality.lowQualityCount;
     return stats;
+  }
+
+  private analyzeDevelopmentQuality(
+    developedTiles: Array<{ x: number; y: number }>,
+    serviceSources: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }>,
+  ): { score: number; lowQualityCount: number } {
+    if (developedTiles.length === 0) return { score: 100, lowQualityCount: 0 };
+    let total = 0;
+    let lowQualityCount = 0;
+    for (const tile of developedTiles) {
+      const score = this.calculateTileDevelopmentQuality(tile.x, tile.y, serviceSources);
+      total += score;
+      if (score < 55) lowQualityCount++;
+    }
+    return {
+      score: this.clampPercent(total / developedTiles.length),
+      lowQualityCount,
+    };
+  }
+
+  private calculateTileDevelopmentQuality(
+    x: number,
+    y: number,
+    serviceSources: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }>,
+  ): number {
+    const tile = this.grid.getTile(x, y);
+    if (!tile?.buildingId) return 0;
+    const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
+    const hasAccess = Boolean(tile.roadId) || this.hasAdjacentRoad(x, y);
+    const maturity = Math.min(14, Math.floor((tile.buildingAgeDays ?? 0) / 3));
+    let score = 48 + maturity + (hasAccess ? 16 : -24);
+    const bufferRisk = this.getTileBufferRisk(x, y);
+
+    if (tile.zone === ZoneType.Residential) {
+      const pos = { x, y };
+      if (this.isResidentialCoveredBy(pos, serviceSources, 'parkValue')) score += 8;
+      if (this.isResidentialCoveredBy(pos, serviceSources, 'healthValue')) score += 6;
+      if (this.isResidentialCoveredBy(pos, serviceSources, 'educationValue')) score += 6;
+      score += Math.max(0, this.getResidentialLevel(tile) - 1) * 5;
+      score -= bufferRisk * 0.25;
+    } else if (tile.zone === ZoneType.Commercial) {
+      if (this.hasNearbyDevelopedZone(x, y, ZoneType.Residential, 3)) score += 10;
+      if (this.hasNearbyDevelopedZone(x, y, ZoneType.Industrial, 2)) score -= 6;
+      score -= bufferRisk * 0.12;
+    } else if (tile.zone === ZoneType.Industrial) {
+      if (bufferRisk <= 0) score += 8;
+      score -= bufferRisk * 0.2;
+    } else if (service) {
+      if (this.hasNearbyDevelopedZone(x, y, ZoneType.Residential, service.radius)) score += 12;
+      if (service.parkValue > 0) score += 4;
+    }
+
+    return this.clampPercent(score);
+  }
+
+  private collectServiceSources(): Array<{ x: number; y: number; definition: ServiceBuildingDefinition }> {
+    const serviceSources: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }> = [];
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const tile = this.grid.getTile(x, y);
+        const definition = tile?.buildingId ? SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId] : null;
+        if (definition) serviceSources.push({ x, y, definition });
+      }
+    }
+    return serviceSources;
   }
 
   private createFunctionalBufferAdvisor(stats: GridStats): FunctionalBufferAdvisor {
@@ -2046,6 +2178,50 @@ export class CitySimulation {
     };
   }
 
+  private createDevelopmentQualityAdvisor(
+    stats: GridStats,
+    serviceGapPressure: number,
+    bufferAdvisor: FunctionalBufferAdvisor,
+  ): DevelopmentQualityAdvisor {
+    const score = stats.developmentQualityScore;
+    const pressure = this.clampPercent(100 - score + stats.lowQualityBuildingCount * 6);
+    if (stats.developedZoneTiles === 0 && stats.serviceBuildings === 0) {
+      return {
+        score,
+        pressure: 0,
+        lowQualityBuildingCount: 0,
+        focus: '起步',
+        driver: '等待已开发建筑成形',
+        action: '先接路形成住宅片区',
+      };
+    }
+    if (score >= 70 && stats.lowQualityBuildingCount <= 1) {
+      return {
+        score,
+        pressure,
+        lowQualityBuildingCount: stats.lowQualityBuildingCount,
+        focus: '优质',
+        driver: `品质${score}/低质${stats.lowQualityBuildingCount}`,
+        action: '保持接路、服务和缓冲',
+      };
+    }
+    return {
+      score,
+      pressure,
+      lowQualityBuildingCount: stats.lowQualityBuildingCount,
+      focus: score < 55 ? '低质' : '改善',
+      driver: `品质${score}/低质${stats.lowQualityBuildingCount}`,
+      action: this.developmentQualityAction(stats, serviceGapPressure, bufferAdvisor),
+    };
+  }
+
+  private developmentQualityAction(stats: GridStats, serviceGapPressure: number, bufferAdvisor: FunctionalBufferAdvisor): string {
+    if (stats.roads < Math.ceil(Math.max(1, stats.zonedTiles) / 4)) return '补道路接入低质建筑';
+    if (serviceGapPressure > 45) return '补公园、诊所或学校';
+    if (bufferAdvisor.pressure > 25) return bufferAdvisor.action;
+    return '等待建筑成熟并补周边服务';
+  }
+
   private analyzeLandUseConflicts(
     industrialTiles: Array<{ x: number; y: number }>,
     sensitiveTiles: Array<{ x: number; y: number; kind: '住宅' | '商业' | '服务' }>,
@@ -2082,6 +2258,7 @@ export class CitySimulation {
     if (this.metrics.pollution > 55) alerts.push('污染压力上升');
     if (this.metrics.landUseConflictPressure > 35) alerts.push('用地冲突偏高');
     if (this.metrics.landUseEfficiencyScore < 65 && this.metrics.vacantZoneTiles >= 4) alerts.push('空置分区过多');
+    if (this.metrics.developmentQualityScore < 60 && this.metrics.lowQualityBuildingCount > 0) alerts.push('片区品质偏低');
     if (this.metrics.parkingPressure > 65) alerts.push('停车压力偏高');
     if (this.metrics.accidentRisk > 55) alerts.push('道路安全风险');
     if (this.metrics.floodRisk > 60) alerts.push('内涝风险上升');
@@ -2113,6 +2290,7 @@ export class CitySimulation {
     if (alert.includes('用地冲突')) return 87;
     if (alert.includes('内涝')) return 86;
     if (alert.includes('空置分区')) return 84;
+    if (alert.includes('片区品质')) return 83;
     if (alert.includes('道路容量') || alert.includes('拥堵')) return 82;
     if (alert.includes('行政')) return 81;
     if (alert.includes('政策')) return 80;
@@ -2303,6 +2481,7 @@ export class CitySimulation {
     upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
     bufferAdvisor: FunctionalBufferAdvisor,
     landUseAdvisor: LandUseEfficiencyAdvisor,
+    qualityAdvisor: DevelopmentQualityAdvisor,
   ): GrowthBottleneckAdvisor {
     const storageUsed = this.getStorageUsed();
     const targetJobs = Math.floor(this.metrics.population * 0.45);
@@ -2389,6 +2568,12 @@ export class CitySimulation {
         action: landUseAdvisor.action,
       },
       {
+        score: qualityAdvisor.pressure,
+        focus: '品质',
+        driver: qualityAdvisor.driver,
+        action: qualityAdvisor.action,
+      },
+      {
         score: storageScore,
         focus: '供应链',
         driver: `仓库${storageUsed}/${STORAGE_CAPACITY}`,
@@ -2430,6 +2615,7 @@ export class CitySimulation {
     upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
     bufferAdvisor: FunctionalBufferAdvisor,
     landUseAdvisor: LandUseEfficiencyAdvisor,
+    qualityAdvisor: DevelopmentQualityAdvisor,
   ): DistrictPriorityAdvisor {
     const housingPressure = stats.housingCapacity === 0
       ? stats.roads > 0 || stats.zonedTiles > 0 ? 72 : 36
@@ -2498,6 +2684,12 @@ export class CitySimulation {
         focus: '用地',
         driver: landUseAdvisor.driver,
         action: landUseAdvisor.action,
+      },
+      {
+        score: qualityAdvisor.pressure,
+        focus: '品质',
+        driver: qualityAdvisor.driver,
+        action: qualityAdvisor.action,
       },
       {
         score: Math.round(demandPressure),
@@ -2810,6 +3002,11 @@ export class CitySimulation {
         action: this.metrics.landUseEfficiencyAction,
       },
       {
+        risk: 100 - this.metrics.developmentQualityScore,
+        focus: '品质',
+        action: this.metrics.developmentQualityAction,
+      },
+      {
         risk: this.metrics.policyBacklog,
         focus: '政策',
         action: '关闭低优先级政策或提升城市等级',
@@ -3021,6 +3218,10 @@ export class CitySimulation {
       return { label: '交通', value: `${this.getRoadLabel(tile.roadId)} 容量${ROAD_CAPACITY[tile.roadId] ?? 1}` };
     }
 
+    const qualityScore = tile.buildingId
+      ? this.calculateTileDevelopmentQuality(x, y, this.collectServiceSources())
+      : null;
+    const qualityPart = qualityScore === null ? '' : ` 品质${qualityScore}`;
     const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
     if (service) {
       const effects = [
@@ -3028,7 +3229,7 @@ export class CitySimulation {
         service.healthValue > 0 ? '医疗' : '',
         service.educationValue > 0 ? '教育' : '',
       ].filter(Boolean).join('/');
-      return { label: '服务', value: `${effects || '公共'} 半径${service.radius}` };
+      return { label: '服务', value: `${effects || '公共'} 半径${service.radius}${qualityPart}` };
     }
 
     if (tile.terrain !== TerrainType.Plain) return { label: '地形', value: INSPECTION_TERRAIN_LABELS[tile.terrain] };
@@ -3042,13 +3243,13 @@ export class CitySimulation {
     if (tile.zone === ZoneType.Residential) {
       const level = this.getResidentialLevel(tile);
       const bufferRisk = this.getTileBufferRisk(x, y);
-      return { label: '住房', value: `Lv${level} 容量${RESIDENTIAL_CAPACITY_BY_LEVEL[level] ?? 0}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
+      return { label: '住房', value: `Lv${level} 容量${RESIDENTIAL_CAPACITY_BY_LEVEL[level] ?? 0}${qualityPart}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
     }
     if (tile.zone === ZoneType.Industrial) {
       const bufferRisk = this.getTileBufferRisk(x, y);
-      return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
+      return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}${qualityPart}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
     }
-    return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}` };
+    return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}${qualityPart}` };
   }
 
   private getTileDiagnosis(x: number, y: number): string {
@@ -3063,12 +3264,23 @@ export class CitySimulation {
     }
 
     const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
-    if (service) return `${service.label}覆盖周边住宅，半径${service.radius}`;
+    if (service) {
+      const qualityScore = this.calculateTileDevelopmentQuality(x, y, this.collectServiceSources());
+      if (qualityScore < 55) return `${service.label}品质${qualityScore}偏低，靠近住宅并接入道路`;
+      return `${service.label}覆盖周边住宅，半径${service.radius}，品质${qualityScore}`;
+    }
 
     const hasRoadAccess = this.hasAdjacentRoad(x, y);
     if (tile.zone === ZoneType.None) return hasRoadAccess ? '临路空地，可规划分区或服务建筑' : '未接路空地，先铺道路打开开发';
     if (!hasRoadAccess) return `${INSPECTION_ZONE_LABELS[tile.zone]}未接路，无法自然开发`;
     if (!tile.buildingId) return `${INSPECTION_ZONE_LABELS[tile.zone]}已接路，当前需求${this.getDemandForZone(tile.zone)}`;
+
+    const qualityScore = this.calculateTileDevelopmentQuality(x, y, this.collectServiceSources());
+    if (qualityScore < 55) {
+      const bufferRisk = this.getTileBufferRisk(x, y);
+      if (bufferRisk > 35) return `品质${qualityScore}偏低，先拉开工业和敏感建筑缓冲`;
+      return `品质${qualityScore}偏低，补道路、服务并等待成熟`;
+    }
 
     if (tile.zone === ZoneType.Residential) {
       const level = this.getResidentialLevel(tile);
@@ -3167,6 +3379,18 @@ export class CitySimulation {
   private hasAdjacentRoad(x: number, y: number): boolean {
     const offsets = [[0, -1], [1, 0], [0, 1], [-1, 0]];
     return offsets.some(([dx, dy]) => Boolean(this.grid.getTile(x + dx, y + dy)?.roadId));
+  }
+
+  private hasNearbyDevelopedZone(x: number, y: number, zone: ZoneType, radius: number): boolean {
+    for (let ty = 0; ty < this.grid.height; ty++) {
+      for (let tx = 0; tx < this.grid.width; tx++) {
+        if (tx === x && ty === y) continue;
+        const tile = this.grid.getTile(tx, ty);
+        if (!tile?.buildingId || tile.zone !== zone) continue;
+        if (this.manhattanDistance({ x, y }, { x: tx, y: ty }) <= radius) return true;
+      }
+    }
+    return false;
   }
 
   private manhattanDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {

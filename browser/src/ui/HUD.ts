@@ -266,6 +266,7 @@ export class HUD {
       '行政: 效' + metrics.administrationEfficiency + ' / 载' + metrics.administrationUtilization + '%<br>' +
       '缓冲: ' + metrics.functionalBufferScore + ' / 冲突' + metrics.landUseConflictCount + '<br>' +
       '用地: ' + metrics.landUseEfficiencyScore + ' / 空置' + metrics.vacantZoneTiles + ' / 开发' + metrics.developedZoneRatio + '%<br>' +
+      '品质: ' + metrics.developmentQualityScore + ' / 低质' + metrics.lowQualityBuildingCount + '<br>' +
       '需求: 住' + metrics.residentialDemand + ' / 商' + metrics.commercialDemand + ' / 工' + metrics.industrialDemand + '<br>' +
       '服务覆盖: 园' + Math.round(metrics.parkCoverage) + '% / 医' + Math.round(metrics.healthCoverage) + '% / 学' + Math.round(metrics.educationCoverage) + '%<br>' +
       '污染: ' + Math.round(metrics.pollution) + ' / 拥堵: ' + Math.round(metrics.congestion) +

@@ -41,7 +41,7 @@
 - 洞察优先栈：`HUD_INSIGHT_PRIORITY_STACK` / `ObjectiveInsightParts` 是右侧目标/警报文案的洞察优先栈，不是新功能按钮，也不增加 HUD 状态格；它把 `RISK_FORECAST_ADVISOR`、`BUDGET_BREAKDOWN_ADVISOR`、`DISTRICT_PRIORITY_ADVISOR`、`ROAD_HIERARCHY_ADVISOR`、`COMMUTE_CORRIDOR_ADVISOR`、`SERVICE_GAP_ADVISOR`、`BUILDING_UPGRADE_READINESS_ADVISOR`、`HOUSING_AFFORDABILITY_ADVISOR`、`ECONOMIC_SPECIALIZATION_ADVISOR`、`DEMAND_DRIVER_ANALYSIS`、`CITY_EVENT_DIGEST` 等现有顾问信息作为候选，`ObjectiveHint` 保持第一优先级，其余 insight 按风险、压力和事件重要性排序并限量显示少量最高优先级条目，降低横屏右侧拥挤；不改变 38/48/33，也不修改 `miniprogram/game.json`。
 - 微信安全生命周期反馈：`WECHAT_SAFE_LIFECYCLE_FEEDBACK` 已迁移到当前非 Unity 微信 Canvas runtime；切后台/暂停时通过 `onHide` 安全自动保存，回到前台时通过 `onShow` 安全读档并结算离线进度，关键城市命令和保存成功/失败使用包裹异常的 `vibrateShort` 触觉反馈；当微信 storage 或触觉 API 不可用时只显示短状态并继续当前城市，不新增 worker，也不修改 `miniprogram/game.json`。
 - 功能缓冲：`FUNCTIONAL_BUFFER_LAND_USE_CONFLICT` 已迁移到当前非 Unity Canvas runtime；已开发工业贴近住宅、商业或非公园服务会形成用地冲突压力，公园可作为缓冲减免，冲突会影响幸福度、评分、住宅/商业/工业需求、告警、风险/卡点/片区优先级洞察、地块检查诊断和“功能缓冲”目标；不新增建筑、按钮、worker，也不修改 `miniprogram/game.json`。
-- 发展品质：已开发建筑会按区位适配、接路、服务、污染和成熟度形成发展品质，影响幸福度、评分、需求、告警和“优质片区”目标。
+- 发展品质：`DEVELOPMENT_QUALITY_DISTRICT` 已迁移到当前非 Unity Canvas runtime；已开发建筑会按区位适配、接路、服务覆盖、污染/功能缓冲和建筑成熟度形成发展品质，影响幸福度、评分、需求、告警、风险/卡点/片区优先级洞察、地块检查诊断和“优质片区”目标；建筑年龄随日推进并进入存档，不新增建筑、按钮、worker，也不修改 `miniprogram/game.json`。
 - 用地效率：`LAND_USE_EFFICIENCY_COMPACT_DEVELOPMENT` 已迁移到当前非 Unity Canvas runtime；住宅/商业/工业分区会统计已开发面积、空置面积和开发率，紧凑开发会提高城市评分，过量空置分区会触发规划告警、风险/卡点/片区优先级洞察和“紧凑用地”目标；不新增建筑、按钮、worker，也不修改 `miniprogram/game.json`。
 - 高密住宅自然开发：居住成本偏高时，满足解锁条件的住宅分区会尝试自然长出公寓楼。
 - 混合用地：在高地价、高公交可达和高服务覆盖的核心区同时提供住房与岗位，并进入“混合核心”里程碑。

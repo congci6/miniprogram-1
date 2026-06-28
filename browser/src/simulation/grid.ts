@@ -2,7 +2,7 @@ import { GridPos, ZoneType, TerrainType } from '@/types/index';
 
 export interface Tile {
   pos: GridPos; zone: ZoneType; terrain: TerrainType;
-  roadId: string; buildingId: string; elevation: number;
+  roadId: string; buildingId: string; buildingAgeDays: number; elevation: number;
 }
 
 export class CityGrid {
@@ -18,7 +18,7 @@ export class CityGrid {
         this.tiles[y][x] = {
           pos: { x, y }, zone: ZoneType.None,
           terrain, roadId: '',
-          buildingId: '', elevation: terrain === TerrainType.Hill ? 1 : 0,
+          buildingId: '', buildingAgeDays: 0, elevation: terrain === TerrainType.Hill ? 1 : 0,
         };
       }
     }
@@ -39,8 +39,18 @@ export class CityGrid {
   setRoad(x: number, y: number, id: string): void {
     const t = this.getTile(x, y); if (t) t.roadId = id;
   }
-  setBuilding(x: number, y: number, id: string): void {
-    const t = this.getTile(x, y); if (t) t.buildingId = id;
+  setBuilding(x: number, y: number, id: string, ageDays?: number): void {
+    const t = this.getTile(x, y);
+    if (!t) return;
+    const wasEmpty = !t.buildingId;
+    t.buildingId = id;
+    if (!id) {
+      t.buildingAgeDays = 0;
+    } else if (ageDays !== undefined) {
+      t.buildingAgeDays = Math.max(0, Math.floor(ageDays));
+    } else if (wasEmpty) {
+      t.buildingAgeDays = 0;
+    }
   }
   setTerrain(x: number, y: number, terrain: TerrainType, elevation = 0): void {
     const t = this.getTile(x, y);
@@ -55,6 +65,7 @@ export class CityGrid {
     t.zone = ZoneType.None;
     t.roadId = '';
     t.buildingId = '';
+    t.buildingAgeDays = 0;
   }
 
   getTileData(): Tile[][] { return this.tiles; }
