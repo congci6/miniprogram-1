@@ -108,6 +108,8 @@ export interface CityMetrics {
   stormwaterResilience: number; floodRisk: number; policyBacklog: number;
   administrationLoad: number; administrationCapacity: number;
   administrationUtilization: number; administrationEfficiency: number;
+  functionalBufferScore: number; landUseConflictPressure: number; landUseConflictCount: number;
+  functionalBufferFocus: string; functionalBufferDriver: string; functionalBufferAction: string;
   landValue: number; rentPressure: number;
   housingCapacity: number; buildingCount: number;
   unlockedBuildingIds: string[]; alerts: string[]; alertDigest: string;

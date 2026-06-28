@@ -508,11 +508,11 @@ class WeChatCityGame {
 
     const lines = [
       this.compactText(`等级: Lv${m.cityLevel} ${m.cityLevelName} 税${m.taxRatePercent}% 行${m.administrationEfficiency}/${m.administrationUtilization}%`, 28),
+      this.compactText(`缓冲: ${m.functionalBufferScore}/冲${m.landUseConflictCount} ${m.functionalBufferAction}`, 28),
       this.compactText(`住房/升级: ${m.housingCapacity.toLocaleString()} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}/候${m.buildingUpgradeReadyCount}`, 28),
       this.compactText(`道路/通勤: ${Math.round(m.roadCoverage)}% ${m.roadHierarchyFocus}${m.roadHierarchyPressure}/${m.commuteCorridorFocus}${m.commuteCorridorScore}`, 28),
       this.compactText(`需求/经济: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}/${m.economicSpecializationFocus}${m.economicSpecializationScore}`, 28),
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),
-      `服务: 园${Math.round(m.parkCoverage)} 医${Math.round(m.healthCoverage)} 学${Math.round(m.educationCoverage)}`,
       this.compactText(`风险/预算: ${m.forecastFocus}${m.forecastRisk}/${m.budgetFocus}${m.budgetStress}`, 28),
       inspection
         ? `地块: ${inspection.title}`
@@ -522,7 +522,7 @@ class WeChatCityGame {
         : this.compactText(this.sim.getTileInspectionLegend(), 28),
       inspection
         ? this.compactText(`诊断: ${inspection.diagnosis}`, 28)
-        : this.compactText(`卡点/优先: ${m.growthBottleneckFocus}${m.growthBottleneckScore}/${m.districtPriorityFocus}${m.districtPriorityScore}`, 28),
+        : this.compactText(`卡点/缓冲: ${m.growthBottleneckFocus}${m.growthBottleneckScore}/${m.functionalBufferFocus}${m.landUseConflictPressure}`, 28),
       inspection && inspection.building !== '无'
         ? this.compactText(`建筑: ${inspection.building}`, 28)
         : `订单交付: ${this.sim.completedOrders}`,

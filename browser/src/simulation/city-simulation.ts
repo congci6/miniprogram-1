@@ -37,6 +37,8 @@ interface GridStats {
   parkCoveredResidentialTiles: number;
   healthCoveredResidentialTiles: number;
   educationCoveredResidentialTiles: number;
+  landUseConflictPressure: number;
+  landUseConflictCount: number;
 }
 
 interface DemandAnalysis {
@@ -102,6 +104,15 @@ interface AdministrationState {
   utilization: number;
   efficiency: number;
   policyBacklog: number;
+}
+
+interface FunctionalBufferAdvisor {
+  score: number;
+  pressure: number;
+  conflictCount: number;
+  focus: string;
+  driver: string;
+  action: string;
 }
 
 interface PolicyDefinition {
@@ -421,6 +432,17 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
         && simulation.metrics.policyBacklog <= 35;
     },
   },
+  {
+    id: 'functional-buffer',
+    title: '建立功能缓冲',
+    description: '让住宅和工业保持间距，避免贴脸污染冲突',
+    rewardCash: 760,
+    rewardExperience: 85,
+    isMet: (simulation, stats) => stats.residentialTiles >= 2
+      && stats.industrialTiles >= 1
+      && simulation.metrics.landUseConflictPressure <= 20
+      && simulation.metrics.functionalBufferScore >= 75,
+  },
 ];
 
 const ZONE_COST = 120;
@@ -623,6 +645,12 @@ export class CitySimulation {
       stormwaterResilience: 30, floodRisk: 0, policyBacklog: 0,
       administrationLoad: 0, administrationCapacity: 105,
       administrationUtilization: 0, administrationEfficiency: 100,
+      functionalBufferScore: 100,
+      landUseConflictPressure: 0,
+      landUseConflictCount: 0,
+      functionalBufferFocus: '起步',
+      functionalBufferDriver: '等待工业与住宅片区成形',
+      functionalBufferAction: '工业预留在城市边缘',
       landValue: 30,
       rentPressure: 0, housingCapacity: 0, buildingCount: 0,
       unlockedBuildingIds: ['community_park'],
@@ -949,6 +977,12 @@ export class CitySimulation {
         label: '优先级',
         text: `${this.metrics.districtPriorityFocus}${this.metrics.districtPriorityScore}: ${this.metrics.districtPriorityAction}`,
         priority: this.metrics.districtPriorityScore >= 35 ? 640 + this.metrics.districtPriorityScore : 0,
+      },
+      {
+        id: 'functional-buffer',
+        label: '缓冲',
+        text: `${this.metrics.functionalBufferFocus}${this.metrics.landUseConflictPressure}: ${this.metrics.functionalBufferAction}`,
+        priority: this.metrics.landUseConflictPressure >= 25 ? 630 + this.metrics.landUseConflictPressure : 0,
       },
       {
         id: 'road',
@@ -1462,6 +1496,11 @@ export class CitySimulation {
         if (this.metrics.policyBacklog > 35) return '政策积压偏高，暂缓继续加政策。';
         return '行政效率达标，等待目标结算。';
       }
+      case 'functional-buffer':
+        if (stats.residentialTiles < 2) return '先形成至少 2 块已入住住宅。';
+        if (stats.industrialTiles < 1) return '把第一片工业放在住宅外侧并接路。';
+        if (this.metrics.landUseConflictPressure > 20) return this.metrics.functionalBufferAction;
+        return '缓冲已达标，等待目标结算。';
       default:
         return '继续扩建城市并优化路网。';
     }
@@ -1566,7 +1605,8 @@ export class CitySimulation {
     const accidentRisk = this.clampPercent(10 + congestion * 0.35 + stats.roads * 0.5 - roadCoverage * 0.08 + policyEffect.accidentRisk);
     const stormwaterResilience = this.clampPercent(28 + parkCoverage * 0.22 + walkability * 0.08 - pollution * 0.1 + policyEffect.stormwaterResilience);
     const floodRisk = this.clampPercent(50 + stats.developedZoneTiles * 1.8 - stormwaterResilience * 0.7 + policyEffect.floodRisk);
-    const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure, policyEffect);
+    const bufferAdvisor = this.createFunctionalBufferAdvisor(stats);
+    const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure, policyEffect, bufferAdvisor.pressure);
     const budget = this.estimateMonthlyBudget(stats, pollution);
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
     const roadAdvisor = this.createRoadHierarchyAdvisor(stats, roadCoverage, congestion);
@@ -1594,6 +1634,12 @@ export class CitySimulation {
     this.metrics.administrationCapacity = administration.capacity;
     this.metrics.administrationUtilization = administration.utilization;
     this.metrics.administrationEfficiency = administration.efficiency;
+    this.metrics.functionalBufferScore = bufferAdvisor.score;
+    this.metrics.landUseConflictPressure = bufferAdvisor.pressure;
+    this.metrics.landUseConflictCount = bufferAdvisor.conflictCount;
+    this.metrics.functionalBufferFocus = bufferAdvisor.focus;
+    this.metrics.functionalBufferDriver = bufferAdvisor.driver;
+    this.metrics.functionalBufferAction = bufferAdvisor.action;
     this.metrics.taxLevel = this.taxLevel;
     this.metrics.taxRatePercent = taxRatePercent;
     this.metrics.landValue = landValue;
@@ -1605,8 +1651,8 @@ export class CitySimulation {
     this.metrics.demandDriver = demand.driver;
     this.metrics.demandAction = demand.action;
     this.metrics.demandUrgency = demand.urgency;
-    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 + administration.efficiency * 0.04 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
-    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 - pollution * 0.2 - floodRisk * 0.06)));
+    this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 + administration.efficiency * 0.04 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - bufferAdvisor.pressure * 0.12 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
+    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 + bufferAdvisor.score * 0.03 - pollution * 0.2 - floodRisk * 0.06 - bufferAdvisor.pressure * 0.08)));
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
@@ -1624,8 +1670,9 @@ export class CitySimulation {
       commuteAdvisor,
       housingAdvisor,
       upgradeAdvisor,
+      bufferAdvisor,
     );
-    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor);
+    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor, bufferAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
@@ -1679,15 +1726,16 @@ export class CitySimulation {
     congestion: number,
     taxPressure: number,
     policyEffect: PolicyEffect,
+    landUseConflictPressure: number,
   ): DemandAnalysis {
     const population = this.metrics.population;
     const targetHousing = Math.max(72, Math.ceil(population * 1.15 + stats.jobs * 0.55 + 48));
     const housingGap = targetHousing - stats.housingCapacity;
     const jobGap = population * 0.45 - stats.jobs;
 
-    const residential = this.clampPercent(48 + housingGap * 0.35 + serviceCoverage * 0.08 + roadCoverage * 0.08 - pollution * 0.18 - congestion * 0.12 - taxPressure * 4 + policyEffect.residentialDemand);
-    const commercial = this.clampPercent(35 + population * 0.18 + landValue * 0.15 + roadCoverage * 0.1 - stats.jobs * 0.12 - congestion * 0.12 - taxPressure * 3 + policyEffect.commercialDemand);
-    const industrial = this.clampPercent(42 + Math.max(0, jobGap) * 0.8 + stats.residentialTiles * 5 - stats.industrialTiles * 14 + roadCoverage * 0.08 - pollution * 0.2 - taxPressure * 2 + policyEffect.industrialDemand);
+    const residential = this.clampPercent(48 + housingGap * 0.35 + serviceCoverage * 0.08 + roadCoverage * 0.08 - pollution * 0.18 - congestion * 0.12 - landUseConflictPressure * 0.16 - taxPressure * 4 + policyEffect.residentialDemand);
+    const commercial = this.clampPercent(35 + population * 0.18 + landValue * 0.15 + roadCoverage * 0.1 - stats.jobs * 0.12 - congestion * 0.12 - landUseConflictPressure * 0.08 - taxPressure * 3 + policyEffect.commercialDemand);
+    const industrial = this.clampPercent(42 + Math.max(0, jobGap) * 0.8 + stats.residentialTiles * 5 - stats.industrialTiles * 14 + roadCoverage * 0.08 - pollution * 0.2 - landUseConflictPressure * 0.1 - taxPressure * 2 + policyEffect.industrialDemand);
     const advice = this.getDemandAdvice(residential, commercial, industrial);
     const top = [
       { key: 'residential', label: '住宅', value: residential },
@@ -1714,6 +1762,9 @@ export class CitySimulation {
       } else if (pollution > 35) {
         driver = '污染压低迁入';
         action = '把工业远离住宅并补公园';
+      } else if (landUseConflictPressure > 30) {
+        driver = '工业贴近住宅';
+        action = '拉开工业距离或补公园缓冲';
       } else if (taxPressure > 0) {
         driver = '税率抑制迁入';
         action = '考虑降税恢复迁入';
@@ -1741,6 +1792,9 @@ export class CitySimulation {
     } else if (stats.jobs < Math.floor(population * 0.45)) {
       driver = '就业缺口';
       action = '远离住宅补工业区';
+    } else if (landUseConflictPressure > 30) {
+      driver = '用地冲突阻力';
+      action = '把新工业放到住宅外侧';
     } else if (stats.industrialTiles === 0 && stats.residentialTiles > 0) {
       driver = '基础产业空白';
       action = '接路规划第一片工业区';
@@ -1793,8 +1847,13 @@ export class CitySimulation {
       parkCoveredResidentialTiles: 0,
       healthCoveredResidentialTiles: 0,
       educationCoveredResidentialTiles: 0,
+      landUseConflictPressure: 0,
+      landUseConflictCount: 0,
     };
     const residentialTiles: Array<{ x: number; y: number }> = [];
+    const industrialTiles: Array<{ x: number; y: number }> = [];
+    const sensitiveTiles: Array<{ x: number; y: number; kind: '住宅' | '商业' | '服务' }> = [];
+    const parkBuffers: Array<{ x: number; y: number }> = [];
     const serviceSources: Array<{ x: number; y: number; definition: ServiceBuildingDefinition }> = [];
     for (let y = 0; y < this.grid.height; y++) {
       for (let x = 0; x < this.grid.width; x++) {
@@ -1811,6 +1870,11 @@ export class CitySimulation {
           stats.jobs += service.jobs;
           stats.pollution += service.pollution;
           serviceSources.push({ x, y, definition: service });
+          if (service.parkValue > 0) {
+            parkBuffers.push({ x, y });
+          } else {
+            sensitiveTiles.push({ x, y, kind: '服务' });
+          }
         }
         const zoneStats = ZONE_STATS[tile.zone];
         if (zoneStats) {
@@ -1824,12 +1888,17 @@ export class CitySimulation {
             stats.housingCapacity += RESIDENTIAL_CAPACITY_BY_LEVEL[this.getResidentialLevel(tile)] ?? 0;
             stats.residentialTiles++;
             residentialTiles.push({ x, y });
+            sensitiveTiles.push({ x, y, kind: '住宅' });
             if (this.getResidentialLevel(tile) > 1) stats.upgradedResidentialTiles++;
           } else {
             stats.housingCapacity += zoneStats.housing;
             stats.jobs += zoneStats.jobs;
+            if (tile.zone === ZoneType.Commercial) sensitiveTiles.push({ x, y, kind: '商业' });
           }
-          if (tile.zone === ZoneType.Industrial) stats.industrialTiles++;
+          if (tile.zone === ZoneType.Industrial) {
+            stats.industrialTiles++;
+            industrialTiles.push({ x, y });
+          }
         }
       }
     }
@@ -1838,7 +1907,73 @@ export class CitySimulation {
       if (this.isResidentialCoveredBy(residential, serviceSources, 'healthValue')) stats.healthCoveredResidentialTiles++;
       if (this.isResidentialCoveredBy(residential, serviceSources, 'educationValue')) stats.educationCoveredResidentialTiles++;
     }
+    const conflicts = this.analyzeLandUseConflicts(industrialTiles, sensitiveTiles, parkBuffers);
+    stats.landUseConflictPressure = conflicts.pressure;
+    stats.landUseConflictCount = conflicts.count;
     return stats;
+  }
+
+  private createFunctionalBufferAdvisor(stats: GridStats): FunctionalBufferAdvisor {
+    const pressure = stats.landUseConflictPressure;
+    const score = this.clampPercent(100 - pressure);
+    if (stats.industrialTiles === 0) {
+      return {
+        score,
+        pressure,
+        conflictCount: 0,
+        focus: '起步',
+        driver: '尚未形成工业压力',
+        action: stats.roads > 0 ? '把工业预留在住宅外侧' : '先铺路再规划分区',
+      };
+    }
+
+    if (pressure <= 20) {
+      return {
+        score,
+        pressure,
+        conflictCount: stats.landUseConflictCount,
+        focus: '良好',
+        driver: '工业与敏感用地间距可控',
+        action: '保持公园或道路作缓冲',
+      };
+    }
+
+    const focus = pressure >= 55 ? '冲突' : '缓冲';
+    return {
+      score,
+      pressure,
+      conflictCount: stats.landUseConflictCount,
+      focus,
+      driver: `${stats.landUseConflictCount}处工业贴近住宅/服务`,
+      action: pressure >= 55 ? '拆改贴近住宅的工业或补公园' : '新工业远离住宅并留公园缓冲',
+    };
+  }
+
+  private analyzeLandUseConflicts(
+    industrialTiles: Array<{ x: number; y: number }>,
+    sensitiveTiles: Array<{ x: number; y: number; kind: '住宅' | '商业' | '服务' }>,
+    parkBuffers: Array<{ x: number; y: number }>,
+  ): { pressure: number; count: number } {
+    let pressure = 0;
+    let count = 0;
+    for (const industrial of industrialTiles) {
+      const nearest = sensitiveTiles
+        .map((sensitive) => ({ ...sensitive, distance: this.manhattanDistance(industrial, sensitive) }))
+        .filter((sensitive) => sensitive.distance <= 2)
+        .sort((a, b) => a.distance - b.distance)[0];
+      if (!nearest) continue;
+
+      const base = nearest.kind === '商业' ? 24 : nearest.kind === '服务' ? 40 : 44;
+      const distanceRelief = nearest.distance >= 2 ? 14 : 0;
+      const parkRelief = parkBuffers.some((park) => this.manhattanDistance(park, industrial) <= 2 || this.manhattanDistance(park, nearest) <= 2)
+        ? 12
+        : 0;
+      const conflict = Math.max(0, base - distanceRelief - parkRelief);
+      if (conflict <= 0) continue;
+      pressure += conflict;
+      count++;
+    }
+    return { pressure: this.clampPercent(pressure), count };
   }
 
   private createAlerts(stats: GridStats): string[] {
@@ -1848,6 +1983,7 @@ export class CitySimulation {
     if (stats.housingCapacity === 0) alerts.push('需要规划住宅区');
     if (stats.jobs < Math.floor(this.metrics.population * 0.35)) alerts.push('就业岗位偏少');
     if (this.metrics.pollution > 55) alerts.push('污染压力上升');
+    if (this.metrics.landUseConflictPressure > 35) alerts.push('用地冲突偏高');
     if (this.metrics.parkingPressure > 65) alerts.push('停车压力偏高');
     if (this.metrics.accidentRisk > 55) alerts.push('道路安全风险');
     if (this.metrics.floodRisk > 60) alerts.push('内涝风险上升');
@@ -1876,6 +2012,7 @@ export class CitySimulation {
   private alertPriority(alert: string): number {
     if (alert.includes('现金')) return 100;
     if (alert.includes('污染')) return 88;
+    if (alert.includes('用地冲突')) return 87;
     if (alert.includes('内涝')) return 86;
     if (alert.includes('道路容量') || alert.includes('拥堵')) return 82;
     if (alert.includes('行政')) return 81;
@@ -2065,6 +2202,7 @@ export class CitySimulation {
     commuteAdvisor: CommuteCorridorAdvisor,
     housingAdvisor: HousingAffordabilityAdvisor,
     upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
+    bufferAdvisor: FunctionalBufferAdvisor,
   ): GrowthBottleneckAdvisor {
     const storageUsed = this.getStorageUsed();
     const targetJobs = Math.floor(this.metrics.population * 0.45);
@@ -2139,6 +2277,12 @@ export class CitySimulation {
         action: jobGap > 0 ? '补商业或工业岗位' : economicAdvisor.action,
       },
       {
+        score: bufferAdvisor.pressure,
+        focus: '缓冲',
+        driver: bufferAdvisor.driver,
+        action: bufferAdvisor.action,
+      },
+      {
         score: storageScore,
         focus: '供应链',
         driver: `仓库${storageUsed}/${STORAGE_CAPACITY}`,
@@ -2178,6 +2322,7 @@ export class CitySimulation {
     commuteAdvisor: CommuteCorridorAdvisor,
     housingAdvisor: HousingAffordabilityAdvisor,
     upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
+    bufferAdvisor: FunctionalBufferAdvisor,
   ): DistrictPriorityAdvisor {
     const housingPressure = stats.housingCapacity === 0
       ? stats.roads > 0 || stats.zonedTiles > 0 ? 72 : 36
@@ -2234,6 +2379,12 @@ export class CitySimulation {
         focus: '环境',
         driver: `污染${Math.round(this.metrics.pollution)}`,
         action: '分散工业并补公园',
+      },
+      {
+        score: bufferAdvisor.pressure,
+        focus: '缓冲',
+        driver: bufferAdvisor.driver,
+        action: bufferAdvisor.action,
       },
       {
         score: Math.round(demandPressure),
@@ -2536,6 +2687,11 @@ export class CitySimulation {
         action: '分散工业并补公园',
       },
       {
+        risk: this.metrics.landUseConflictPressure,
+        focus: '缓冲',
+        action: this.metrics.functionalBufferAction,
+      },
+      {
         risk: this.metrics.policyBacklog,
         focus: '政策',
         action: '关闭低优先级政策或提升城市等级',
@@ -2688,6 +2844,58 @@ export class CitySimulation {
     return buildingId;
   }
 
+  private getTileBufferRisk(x: number, y: number): number {
+    const tile = this.grid.getTile(x, y);
+    if (!tile?.buildingId) return 0;
+    const service = SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId];
+    const selfKind = this.sensitiveKindForTile(tile.zone, service);
+    const isIndustrial = tile.zone === ZoneType.Industrial;
+    if (!isIndustrial && !selfKind) return 0;
+
+    let nearest: { x: number; y: number; kind: '住宅' | '商业' | '服务'; distance: number } | null = null;
+    for (let ty = 0; ty < this.grid.height; ty++) {
+      for (let tx = 0; tx < this.grid.width; tx++) {
+        if (tx === x && ty === y) continue;
+        const other = this.grid.getTile(tx, ty);
+        if (!other?.buildingId) continue;
+        const otherService = SERVICE_BUILDINGS[other.buildingId as ServiceBuildingId];
+        const otherKind = this.sensitiveKindForTile(other.zone, otherService);
+        const matches = isIndustrial ? otherKind : other.zone === ZoneType.Industrial;
+        if (!matches) continue;
+        const distance = this.manhattanDistance({ x, y }, { x: tx, y: ty });
+        if (distance > 2) continue;
+        const kind = isIndustrial ? otherKind! : selfKind!;
+        if (!nearest || distance < nearest.distance) nearest = { x: tx, y: ty, kind, distance };
+      }
+    }
+    if (!nearest) return 0;
+
+    const base = nearest.kind === '商业' ? 24 : nearest.kind === '服务' ? 40 : 44;
+    const distanceRelief = nearest.distance >= 2 ? 14 : 0;
+    const parkRelief = this.hasParkBufferNear({ x, y }, nearest) ? 12 : 0;
+    return this.clampPercent(base - distanceRelief - parkRelief);
+  }
+
+  private sensitiveKindForTile(zone: ZoneType, service?: ServiceBuildingDefinition): '住宅' | '商业' | '服务' | null {
+    if (zone === ZoneType.Residential) return '住宅';
+    if (zone === ZoneType.Commercial) return '商业';
+    if (service && service.parkValue <= 0) return '服务';
+    return null;
+  }
+
+  private hasParkBufferNear(a: { x: number; y: number }, b: { x: number; y: number }): boolean {
+    for (let y = 0; y < this.grid.height; y++) {
+      for (let x = 0; x < this.grid.width; x++) {
+        const tile = this.grid.getTile(x, y);
+        const service = tile?.buildingId ? SERVICE_BUILDINGS[tile.buildingId as ServiceBuildingId] : null;
+        if (!service || service.parkValue <= 0) continue;
+        const park = { x, y };
+        if (this.manhattanDistance(park, a) <= 2 || this.manhattanDistance(park, b) <= 2) return true;
+      }
+    }
+    return false;
+  }
+
   private getTileOverlaySummary(x: number, y: number): { label: string; value: string } {
     const tile = this.grid.getTile(x, y);
     if (!tile) return { label: '图层', value: '未知' };
@@ -2715,7 +2923,12 @@ export class CitySimulation {
     }
     if (tile.zone === ZoneType.Residential) {
       const level = this.getResidentialLevel(tile);
-      return { label: '住房', value: `Lv${level} 容量${RESIDENTIAL_CAPACITY_BY_LEVEL[level] ?? 0}` };
+      const bufferRisk = this.getTileBufferRisk(x, y);
+      return { label: '住房', value: `Lv${level} 容量${RESIDENTIAL_CAPACITY_BY_LEVEL[level] ?? 0}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
+    }
+    if (tile.zone === ZoneType.Industrial) {
+      const bufferRisk = this.getTileBufferRisk(x, y);
+      return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}${bufferRisk > 0 ? ` 缓冲${bufferRisk}` : ''}` };
     }
     return { label: '就业', value: `${zoneStats.jobs}岗位 污染${zoneStats.pollution}` };
   }
@@ -2741,6 +2954,8 @@ export class CitySimulation {
 
     if (tile.zone === ZoneType.Residential) {
       const level = this.getResidentialLevel(tile);
+      const bufferRisk = this.getTileBufferRisk(x, y);
+      if (bufferRisk > 35) return '住宅贴近工业，建议用道路或公园拉开缓冲';
       if (level <= 0) return '住宅分区等待自然入住';
       if (level >= MAX_RESIDENTIAL_LEVEL) return '住宅已达当前最高等级，继续补新住宅片区';
       const nextLevel = level + 1;
@@ -2749,7 +2964,10 @@ export class CitySimulation {
     }
 
     if (tile.zone === ZoneType.Commercial) return '商业提供岗位，靠近住宅与道路客流更稳';
-    if (tile.zone === ZoneType.Industrial) return '工业提供岗位和材料基础，注意污染远离住宅';
+    if (tile.zone === ZoneType.Industrial) {
+      const bufferRisk = this.getTileBufferRisk(x, y);
+      return bufferRisk > 35 ? '工业贴近住宅或服务，建议迁到边缘或补公园缓冲' : '工业提供岗位和材料基础，注意污染远离住宅';
+    }
     return '保持接路并观察服务覆盖';
   }
 
@@ -2831,5 +3049,9 @@ export class CitySimulation {
   private hasAdjacentRoad(x: number, y: number): boolean {
     const offsets = [[0, -1], [1, 0], [0, 1], [-1, 0]];
     return offsets.some(([dx, dy]) => Boolean(this.grid.getTile(x + dx, y + dy)?.roadId));
+  }
+
+  private manhattanDistance(a: { x: number; y: number }, b: { x: number; y: number }): number {
+    return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
   }
 }
