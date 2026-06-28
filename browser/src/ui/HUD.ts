@@ -261,6 +261,7 @@ export class HUD {
       '等级: Lv ' + metrics.cityLevel + ' ' + metrics.cityLevelName + '<br>' +
       '住房容量: ' + metrics.housingCapacity.toLocaleString() + ' / 混合: ' + metrics.mixedUseBuildings + ' / 办公: ' + metrics.officeBuildings + '<br>' +
       '游客: ' + metrics.visitors.toLocaleString() + ' / 吸引力: ' + metrics.attractiveness + ' / 收入: $' + metrics.tourismIncome + '<br>' +
+      '人才: 素质' + metrics.workforceSkill + ' / 缺口' + metrics.laborShortage + ' / 生产+$' + metrics.productivityBonus + '<br>' +
       '已开发地块: ' + metrics.buildingCount + '<br>' +
       '道路覆盖: ' + Math.round(metrics.roadCoverage) + '%<br>' +
       '税率: ' + metrics.taxRatePercent + '%<br>' +

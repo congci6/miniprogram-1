@@ -116,6 +116,7 @@ export interface CityMetrics {
   developmentQualityFocus: string; developmentQualityDriver: string; developmentQualityAction: string;
   landValue: number; rentPressure: number;
   attractiveness: number; visitors: number; tourismIncome: number;
+  workforceSkill: number; laborShortage: number; productivityBonus: number;
   housingCapacity: number; buildingCount: number; mixedUseBuildings: number; officeBuildings: number; officeJobs: number;
   unlockedBuildingIds: string[]; alerts: string[]; alertDigest: string;
   recentEvents: string[];
