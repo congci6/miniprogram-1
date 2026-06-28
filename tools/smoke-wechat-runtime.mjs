@@ -121,12 +121,17 @@ function tap(x, y) {
   touchCallbacks.end({ changedTouches: [touch] });
 }
 
-function findToolbarCenter(index) {
-  const toolbarTexts = textDraws
-    .filter((draw) => draw.textAlign === 'center' && draw.y > 320 && draw.y < 365)
+function findCenteredTextInBand(minY, maxY, index, minimumCount, label) {
+  const textCenters = textDraws
+    .filter((draw) => draw.textAlign === 'center' && draw.y > minY && draw.y < maxY)
     .sort((left, right) => left.x - right.x);
-  assert(toolbarTexts.length >= 9, `Runtime should draw all toolbar labels; got ${toolbarTexts.length}.`);
-  return toolbarTexts[index];
+  assert(textCenters.length >= minimumCount, `Runtime should draw ${label}; got ${textCenters.length}.`);
+  assert(textCenters[index], `Runtime should draw ${label} at index ${index}.`);
+  return textCenters[index];
+}
+
+function findToolbarCenter(index) {
+  return findCenteredTextInBand(320, 365, index, 9, 'all toolbar labels');
 }
 
 function screenForTile(x, y) {
@@ -171,6 +176,21 @@ assert(
   snapshotAfterInteraction?.tiles?.some((tile) => tile.x === 12 && tile.y === 9 && tile.roadId === 'local'),
   'Runtime should apply the selected road tool to the tapped map tile.',
 );
+
+const highTaxButtonCenter = findCenteredTextInBand(235, 260, 2, 3, 'tax controls');
+const savesBeforeTax = calls.setStorageSync;
+tap(highTaxButtonCenter.x, highTaxButtonCenter.y);
+assert(calls.setStorageSync > savesBeforeTax, 'Runtime should save after changing tax level.');
+const snapshotAfterTax = Array.from(storage.values()).at(-1);
+assert(snapshotAfterTax?.metrics?.taxLevel === 2, 'Runtime should apply the high tax button through the management panel.');
+assert(snapshotAfterTax?.metrics?.taxRatePercent === 12, 'Runtime should save the high tax rate after tapping the management panel.');
+
+const firstPolicyButtonCenter = findCenteredTextInBand(260, 310, 0, 5, 'policy controls');
+const savesBeforePolicy = calls.setStorageSync;
+tap(firstPolicyButtonCenter.x, firstPolicyButtonCenter.y);
+assert(calls.setStorageSync > savesBeforePolicy, 'Runtime should save after toggling a policy.');
+const snapshotAfterPolicy = Array.from(storage.values()).at(-1);
+assert(snapshotAfterPolicy?.activePolicies?.length === 1, 'Runtime should toggle a policy through the management panel.');
 
 lifecycleCallbacks.hide();
 assert(calls.setStorageSync > 0 && storage.size > 0, 'Runtime should save city state on hide.');
