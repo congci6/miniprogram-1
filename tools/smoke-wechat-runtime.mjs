@@ -12,6 +12,7 @@ assert(source.includes('NON_UNITY_WECHAT_CANVAS_RUNTIME'), 'Generated game.js is
 
 const storage = new Map();
 const frameCallbacks = [];
+const textDraws = [];
 const lifecycleCallbacks = { hide: null, show: null };
 const touchCallbacks = { start: null, move: null, end: null };
 const calls = {
@@ -51,7 +52,10 @@ const context2d = {
   createLinearGradient() {
     return { addColorStop() {} };
   },
-  fillText() { calls.fillText += 1; },
+  fillText(text, x, y) {
+    calls.fillText += 1;
+    textDraws.push({ text: String(text), x, y, textAlign: this.textAlign });
+  },
   measureText(text) {
     const width = Array.from(String(text)).reduce((total, ch) => total + (ch.charCodeAt(0) > 127 ? 12 : 7), 0);
     return { width };
@@ -111,6 +115,35 @@ const sandbox = {
 const context = createContext(sandbox);
 new Script(source, { filename: 'miniprogram/game.js' }).runInContext(context);
 
+function tap(x, y) {
+  const touch = { clientX: x, clientY: y };
+  touchCallbacks.start({ touches: [touch] });
+  touchCallbacks.end({ changedTouches: [touch] });
+}
+
+function findToolbarCenter(index) {
+  const toolbarTexts = textDraws
+    .filter((draw) => draw.textAlign === 'center' && draw.y > 320 && draw.y < 365)
+    .sort((left, right) => left.x - right.x);
+  assert(toolbarTexts.length >= 9, `Runtime should draw all toolbar labels; got ${toolbarTexts.length}.`);
+  return toolbarTexts[index];
+}
+
+function screenForTile(x, y) {
+  const tileW = 48;
+  const tileH = 24;
+  const gridW = 24;
+  const gridH = 18;
+  const originX = wx.getSystemInfoSync().windowWidth / 2;
+  const originY = Math.max(70, wx.getSystemInfoSync().windowHeight * 0.2);
+  const dx = x - gridW / 2;
+  const dy = y - gridH / 2;
+  return {
+    x: originX + (dx - dy) * (tileW / 2),
+    y: originY + (dx + dy) * (tileH / 2),
+  };
+}
+
 assert(sandbox.GameGlobal.__POCKET_CITY_RUNTIME__ === 'NON_UNITY_WECHAT_CANVAS_RUNTIME', 'Runtime marker was not published to GameGlobal.');
 assert(calls.createCanvas === 1, 'Runtime should create exactly one canvas.');
 assert(calls.getContext === 1, 'Runtime should request one 2D canvas context.');
@@ -127,9 +160,10 @@ assert(calls.requestAnimationFrame >= 2, 'Runtime should schedule the next frame
 
 const savesBeforeInteraction = calls.setStorageSync;
 const vibrationsBeforeInteraction = calls.vibrateShort;
-touchCallbacks.start({ touches: [{ clientX: 190, clientY: 344 }] });
-touchCallbacks.start({ touches: [{ clientX: 406, clientY: 75 }] });
-touchCallbacks.end({ changedTouches: [{ clientX: 406, clientY: 75 }] });
+const roadToolCenter = findToolbarCenter(1);
+const mapCenter = screenForTile(12, 9);
+tap(roadToolCenter.x, roadToolCenter.y);
+tap(mapCenter.x, mapCenter.y);
 assert(calls.vibrateShort > vibrationsBeforeInteraction, 'Runtime should vibrate after tool selection or placement.');
 assert(calls.setStorageSync > savesBeforeInteraction, 'Runtime should save after placing a road.');
 const snapshotAfterInteraction = Array.from(storage.values()).at(-1);
