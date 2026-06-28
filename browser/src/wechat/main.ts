@@ -643,10 +643,12 @@ class WeChatCityGame {
       this.ctx.strokeStyle = locked ? 'rgba(255,255,255,0.08)' : selected ? '#b7e39a' : 'rgba(255,255,255,0.18)';
       this.ctx.stroke();
       this.ctx.fillStyle = locked ? '#8f9b95' : selected ? '#07100b' : '#edf7ef';
-      this.ctx.font = `${selected ? 'bold ' : ''}13px sans-serif`;
+      const fontSize = button.width < 42 ? 11 : 13;
+      this.ctx.font = `${selected ? 'bold ' : ''}${fontSize}px sans-serif`;
       this.ctx.textAlign = 'center';
       this.ctx.textBaseline = 'middle';
-      this.ctx.fillText(button.label + this.lockSuffix(unlockEntry), button.x + button.width / 2, button.y + button.height / 2);
+      const label = this.fitTextToWidth(button.label + this.lockSuffix(unlockEntry), button.width - 6);
+      this.ctx.fillText(label, button.x + button.width / 2, button.y + button.height / 2);
       this.ctx.textAlign = 'left';
     });
   }
@@ -666,13 +668,16 @@ class WeChatCityGame {
 
   private layoutTools(): void {
     this.buttons.length = 0;
-    const buttonWidth = Math.min(66, Math.max(48, (this.width - 48) / TOOLS.length));
-    const totalWidth = buttonWidth * TOOLS.length + (TOOLS.length - 1) * 6;
-    let x = (this.width - totalWidth) / 2;
+    const gap = this.width < 420 ? 4 : 6;
+    const sideMargin = this.width < 420 ? 8 : 24;
+    const availableWidth = Math.max(0, this.width - sideMargin * 2 - (TOOLS.length - 1) * gap);
+    const buttonWidth = Math.min(66, Math.max(22, availableWidth / TOOLS.length));
+    const totalWidth = buttonWidth * TOOLS.length + (TOOLS.length - 1) * gap;
+    let x = Math.max(4, (this.width - totalWidth) / 2);
     const y = this.height - 48;
     for (const tool of TOOLS) {
       this.buttons.push({ tool, label: TOOL_LABELS[tool], x, y, width: buttonWidth, height: 34 });
-      x += buttonWidth + 6;
+      x += buttonWidth + gap;
     }
   }
 
@@ -966,10 +971,13 @@ class WeChatCityGame {
   }
 
   private compactText(text: string, maxChars: number): string {
+    return this.fitTextToWidth(text, maxChars * 7.5);
+  }
+
+  private fitTextToWidth(text: string, maxWidth: number): string {
     const ellipsis = '...';
-    const maxWidth = maxChars * 7.5;
-    if (text.length <= maxChars && this.ctx.measureText(text).width <= maxWidth) return text;
     if (this.ctx.measureText(text).width <= maxWidth) return text;
+    if (this.ctx.measureText(ellipsis).width > maxWidth) return '';
 
     let low = 0;
     let high = text.length;
