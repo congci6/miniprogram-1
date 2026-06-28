@@ -26,6 +26,7 @@ interface GridStats {
   roadCapacity: number;
   zonedTiles: number;
   developedZoneTiles: number;
+  vacantZoneTiles: number;
   housingCapacity: number;
   jobs: number;
   pollution: number;
@@ -110,6 +111,16 @@ interface FunctionalBufferAdvisor {
   score: number;
   pressure: number;
   conflictCount: number;
+  focus: string;
+  driver: string;
+  action: string;
+}
+
+interface LandUseEfficiencyAdvisor {
+  score: number;
+  pressure: number;
+  vacantZoneTiles: number;
+  developedZoneRatio: number;
   focus: string;
   driver: string;
   action: string;
@@ -443,6 +454,17 @@ const OBJECTIVE_DEFINITIONS: CityObjectiveDefinition[] = [
       && simulation.metrics.landUseConflictPressure <= 20
       && simulation.metrics.functionalBufferScore >= 75,
   },
+  {
+    id: 'compact-development',
+    title: '推进紧凑用地',
+    description: '先消化已划分地块，再继续外扩新区',
+    rewardCash: 840,
+    rewardExperience: 95,
+    isMet: (simulation, stats) => stats.zonedTiles >= 6
+      && simulation.metrics.developedZoneRatio >= 70
+      && simulation.metrics.vacantZoneTiles <= 3
+      && simulation.metrics.landUseEfficiencyScore >= 70,
+  },
 ];
 
 const ZONE_COST = 120;
@@ -651,6 +673,12 @@ export class CitySimulation {
       functionalBufferFocus: '起步',
       functionalBufferDriver: '等待工业与住宅片区成形',
       functionalBufferAction: '工业预留在城市边缘',
+      landUseEfficiencyScore: 100,
+      vacantZoneTiles: 0,
+      developedZoneRatio: 100,
+      landUseEfficiencyFocus: '起步',
+      landUseEfficiencyDriver: '尚未形成分区压力',
+      landUseEfficiencyAction: '先接路规划少量住宅',
       landValue: 30,
       rentPressure: 0, housingCapacity: 0, buildingCount: 0,
       unlockedBuildingIds: ['community_park'],
@@ -983,6 +1011,12 @@ export class CitySimulation {
         label: '缓冲',
         text: `${this.metrics.functionalBufferFocus}${this.metrics.landUseConflictPressure}: ${this.metrics.functionalBufferAction}`,
         priority: this.metrics.landUseConflictPressure >= 25 ? 630 + this.metrics.landUseConflictPressure : 0,
+      },
+      {
+        id: 'land-use',
+        label: '用地',
+        text: `${this.metrics.landUseEfficiencyFocus}${this.metrics.landUseEfficiencyScore}: ${this.metrics.landUseEfficiencyAction}`,
+        priority: this.metrics.landUseEfficiencyScore < 70 ? 625 + (100 - this.metrics.landUseEfficiencyScore) : 0,
       },
       {
         id: 'road',
@@ -1501,6 +1535,11 @@ export class CitySimulation {
         if (stats.industrialTiles < 1) return '把第一片工业放在住宅外侧并接路。';
         if (this.metrics.landUseConflictPressure > 20) return this.metrics.functionalBufferAction;
         return '缓冲已达标，等待目标结算。';
+      case 'compact-development':
+        if (stats.zonedTiles < 6) return '规划至少 6 块分区，形成可比较的片区。';
+        if (this.metrics.vacantZoneTiles > 3) return this.metrics.landUseEfficiencyAction;
+        if (this.metrics.developedZoneRatio < 70) return '等待已接路分区自然开发，暂缓继续外扩。';
+        return '用地效率达标，等待目标结算。';
       default:
         return '继续扩建城市并优化路网。';
     }
@@ -1606,6 +1645,7 @@ export class CitySimulation {
     const stormwaterResilience = this.clampPercent(28 + parkCoverage * 0.22 + walkability * 0.08 - pollution * 0.1 + policyEffect.stormwaterResilience);
     const floodRisk = this.clampPercent(50 + stats.developedZoneTiles * 1.8 - stormwaterResilience * 0.7 + policyEffect.floodRisk);
     const bufferAdvisor = this.createFunctionalBufferAdvisor(stats);
+    const landUseAdvisor = this.createLandUseEfficiencyAdvisor(stats, roadCoverage);
     const demand = this.calculateDemand(stats, roadCoverage, serviceCoverage, landValue, pollution, congestion, taxPressure, policyEffect, bufferAdvisor.pressure);
     const budget = this.estimateMonthlyBudget(stats, pollution);
     const serviceAdvisor = this.createServiceGapAdvisor(stats, parkCoverage, healthCoverage, educationCoverage);
@@ -1640,6 +1680,12 @@ export class CitySimulation {
     this.metrics.functionalBufferFocus = bufferAdvisor.focus;
     this.metrics.functionalBufferDriver = bufferAdvisor.driver;
     this.metrics.functionalBufferAction = bufferAdvisor.action;
+    this.metrics.landUseEfficiencyScore = landUseAdvisor.score;
+    this.metrics.vacantZoneTiles = landUseAdvisor.vacantZoneTiles;
+    this.metrics.developedZoneRatio = landUseAdvisor.developedZoneRatio;
+    this.metrics.landUseEfficiencyFocus = landUseAdvisor.focus;
+    this.metrics.landUseEfficiencyDriver = landUseAdvisor.driver;
+    this.metrics.landUseEfficiencyAction = landUseAdvisor.action;
     this.metrics.taxLevel = this.taxLevel;
     this.metrics.taxRatePercent = taxRatePercent;
     this.metrics.landValue = landValue;
@@ -1652,7 +1698,7 @@ export class CitySimulation {
     this.metrics.demandAction = demand.action;
     this.metrics.demandUrgency = demand.urgency;
     this.metrics.happiness = Math.round(Math.max(5, Math.min(100, 50 + roadCoverage * 0.18 + serviceCoverage * 0.18 + walkability * 0.08 + administration.efficiency * 0.04 - pollution * 0.22 - rentPressure * 0.2 - accidentRisk * 0.08 - bufferAdvisor.pressure * 0.12 - taxPressure * 2 - policyBacklog * 0.06 + policyEffect.happiness)));
-    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 + bufferAdvisor.score * 0.03 - pollution * 0.2 - floodRisk * 0.06 - bufferAdvisor.pressure * 0.08)));
+    this.metrics.cityScore = Math.round(Math.max(1, Math.min(100, 42 + this.metrics.happiness * 0.35 + roadCoverage * 0.18 + serviceCoverage * 0.12 + stormwaterResilience * 0.04 + administration.efficiency * 0.04 + bufferAdvisor.score * 0.03 + landUseAdvisor.score * 0.04 - pollution * 0.2 - floodRisk * 0.06 - bufferAdvisor.pressure * 0.08 - landUseAdvisor.pressure * 0.06)));
     this.refreshCityLevelProgress();
     this.metrics.alerts = this.createAlerts(stats);
     this.metrics.alertDigest = this.createAlertDigest(this.metrics.alerts);
@@ -1671,8 +1717,9 @@ export class CitySimulation {
       housingAdvisor,
       upgradeAdvisor,
       bufferAdvisor,
+      landUseAdvisor,
     );
-    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor, bufferAdvisor);
+    const districtAdvisor = this.createDistrictPriorityAdvisor(stats, demand, budgetAdvisor, serviceAdvisor, roadAdvisor, commuteAdvisor, housingAdvisor, upgradeAdvisor, bufferAdvisor, landUseAdvisor);
     this.metrics.forecastRisk = forecast.risk;
     this.metrics.forecastFocus = forecast.focus;
     this.metrics.forecastAction = forecast.action;
@@ -1836,6 +1883,7 @@ export class CitySimulation {
       roadCapacity: 0,
       zonedTiles: 0,
       developedZoneTiles: 0,
+      vacantZoneTiles: 0,
       housingCapacity: 0,
       jobs: 0,
       pollution: 0,
@@ -1907,6 +1955,7 @@ export class CitySimulation {
       if (this.isResidentialCoveredBy(residential, serviceSources, 'healthValue')) stats.healthCoveredResidentialTiles++;
       if (this.isResidentialCoveredBy(residential, serviceSources, 'educationValue')) stats.educationCoveredResidentialTiles++;
     }
+    stats.vacantZoneTiles = Math.max(0, stats.zonedTiles - stats.developedZoneTiles);
     const conflicts = this.analyzeLandUseConflicts(industrialTiles, sensitiveTiles, parkBuffers);
     stats.landUseConflictPressure = conflicts.pressure;
     stats.landUseConflictCount = conflicts.count;
@@ -1949,6 +1998,54 @@ export class CitySimulation {
     };
   }
 
+  private createLandUseEfficiencyAdvisor(stats: GridStats, roadCoverage: number): LandUseEfficiencyAdvisor {
+    const developedZoneRatio = stats.zonedTiles === 0
+      ? 100
+      : this.clampPercent((stats.developedZoneTiles / Math.max(1, stats.zonedTiles)) * 100);
+    const vacancyShare = stats.zonedTiles === 0 ? 0 : stats.vacantZoneTiles / Math.max(1, stats.zonedTiles);
+    const pressure = stats.zonedTiles < 4
+      ? 0
+      : this.clampPercent(vacancyShare * 115 + Math.max(0, stats.vacantZoneTiles - 4) * 7 - roadCoverage * 0.08);
+    const score = this.clampPercent(100 - pressure);
+
+    if (stats.zonedTiles === 0) {
+      return {
+        score,
+        pressure,
+        vacantZoneTiles: 0,
+        developedZoneRatio,
+        focus: '起步',
+        driver: '尚未划分可开发片区',
+        action: '先沿道路规划住宅',
+      };
+    }
+
+    if (pressure <= 25) {
+      return {
+        score,
+        pressure,
+        vacantZoneTiles: stats.vacantZoneTiles,
+        developedZoneRatio,
+        focus: '紧凑',
+        driver: `开发率${developedZoneRatio}%`,
+        action: '按需求小步外扩',
+      };
+    }
+
+    const action = roadCoverage < 55
+      ? '补道路接入空置分区'
+      : '暂缓外扩，等待空置分区开发';
+    return {
+      score,
+      pressure,
+      vacantZoneTiles: stats.vacantZoneTiles,
+      developedZoneRatio,
+      focus: stats.vacantZoneTiles >= 6 ? '空置' : '消化',
+      driver: `${stats.vacantZoneTiles}块分区待开发/开发率${developedZoneRatio}%`,
+      action,
+    };
+  }
+
   private analyzeLandUseConflicts(
     industrialTiles: Array<{ x: number; y: number }>,
     sensitiveTiles: Array<{ x: number; y: number; kind: '住宅' | '商业' | '服务' }>,
@@ -1984,6 +2081,7 @@ export class CitySimulation {
     if (stats.jobs < Math.floor(this.metrics.population * 0.35)) alerts.push('就业岗位偏少');
     if (this.metrics.pollution > 55) alerts.push('污染压力上升');
     if (this.metrics.landUseConflictPressure > 35) alerts.push('用地冲突偏高');
+    if (this.metrics.landUseEfficiencyScore < 65 && this.metrics.vacantZoneTiles >= 4) alerts.push('空置分区过多');
     if (this.metrics.parkingPressure > 65) alerts.push('停车压力偏高');
     if (this.metrics.accidentRisk > 55) alerts.push('道路安全风险');
     if (this.metrics.floodRisk > 60) alerts.push('内涝风险上升');
@@ -2014,6 +2112,7 @@ export class CitySimulation {
     if (alert.includes('污染')) return 88;
     if (alert.includes('用地冲突')) return 87;
     if (alert.includes('内涝')) return 86;
+    if (alert.includes('空置分区')) return 84;
     if (alert.includes('道路容量') || alert.includes('拥堵')) return 82;
     if (alert.includes('行政')) return 81;
     if (alert.includes('政策')) return 80;
@@ -2203,6 +2302,7 @@ export class CitySimulation {
     housingAdvisor: HousingAffordabilityAdvisor,
     upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
     bufferAdvisor: FunctionalBufferAdvisor,
+    landUseAdvisor: LandUseEfficiencyAdvisor,
   ): GrowthBottleneckAdvisor {
     const storageUsed = this.getStorageUsed();
     const targetJobs = Math.floor(this.metrics.population * 0.45);
@@ -2283,6 +2383,12 @@ export class CitySimulation {
         action: bufferAdvisor.action,
       },
       {
+        score: landUseAdvisor.pressure,
+        focus: '用地',
+        driver: landUseAdvisor.driver,
+        action: landUseAdvisor.action,
+      },
+      {
         score: storageScore,
         focus: '供应链',
         driver: `仓库${storageUsed}/${STORAGE_CAPACITY}`,
@@ -2323,6 +2429,7 @@ export class CitySimulation {
     housingAdvisor: HousingAffordabilityAdvisor,
     upgradeAdvisor: BuildingUpgradeReadinessAdvisor,
     bufferAdvisor: FunctionalBufferAdvisor,
+    landUseAdvisor: LandUseEfficiencyAdvisor,
   ): DistrictPriorityAdvisor {
     const housingPressure = stats.housingCapacity === 0
       ? stats.roads > 0 || stats.zonedTiles > 0 ? 72 : 36
@@ -2385,6 +2492,12 @@ export class CitySimulation {
         focus: '缓冲',
         driver: bufferAdvisor.driver,
         action: bufferAdvisor.action,
+      },
+      {
+        score: landUseAdvisor.pressure,
+        focus: '用地',
+        driver: landUseAdvisor.driver,
+        action: landUseAdvisor.action,
       },
       {
         score: Math.round(demandPressure),
@@ -2690,6 +2803,11 @@ export class CitySimulation {
         risk: this.metrics.landUseConflictPressure,
         focus: '缓冲',
         action: this.metrics.functionalBufferAction,
+      },
+      {
+        risk: 100 - this.metrics.landUseEfficiencyScore,
+        focus: '用地',
+        action: this.metrics.landUseEfficiencyAction,
       },
       {
         risk: this.metrics.policyBacklog,
