@@ -534,10 +534,11 @@ class WeChatCityGame {
     const m = this.sim.metrics;
     const inspection = this.selectedTile ? this.sim.getTileInspection(this.selectedTile.pos.x, this.selectedTile.pos.y) : null;
     const x = 12;
-    const y = this.height - 252;
+    const panelHeight = 250;
+    const y = this.height - panelHeight - 18;
     const width = 238;
     this.ctx.fillStyle = 'rgba(18,24,28,0.82)';
-    this.roundRect(x, y, width, 234, 6);
+    this.roundRect(x, y, width, panelHeight, 6);
     this.ctx.fill();
 
     const lines = [
@@ -547,6 +548,7 @@ class WeChatCityGame {
       this.compactText(`品质: ${m.developmentQualityScore}/低${m.lowQualityBuildingCount} ${m.developmentQualityAction}`, 28),
       this.compactText(`住/混/办: ${m.housingCapacity.toLocaleString()}/${m.mixedUseBuildings}/${m.officeBuildings} ${m.housingAffordabilityFocus}${m.housingAffordabilityScore}`, 28),
       this.compactText(`道路/通勤: ${Math.round(m.roadCoverage)}% ${m.roadHierarchyFocus}${m.roadHierarchyPressure}/${m.commuteCorridorFocus}${m.commuteCorridorScore}`, 28),
+      this.compactText(`需求: 住${m.residentialDemand} 商${m.commercialDemand} 工${m.industrialDemand}`, 28),
       this.compactText(`经济: ${m.economicSpecializationFocus}${m.economicSpecializationScore} 游${m.visitors} 才${m.workforceSkill}/缺${m.laborShortage}`, 28),
       this.compactText(`驱动: ${m.demandDriver} -> ${m.demandAction}`, 28),
       inspection
